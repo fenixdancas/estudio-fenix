@@ -269,16 +269,24 @@ let savedSession=sessionStorage.getItem("fenix_session"); if(savedSession){const
 
 function teacherIdMatches(a,b){
  const na=String(a??"").trim(), nb=String(b??"").trim();
- return na!=="" && nb!=="" && (na===nb || Number(na)===Number(nb));
+ if(!na||!nb)return false;
+ const clean=x=>x.replace(/^prof:/i,"").trim();
+ const ca=clean(na), cb=clean(nb);
+ if(ca===cb)return true;
+ if(Number.isFinite(Number(ca))&&Number.isFinite(Number(cb)))return Number(ca)===Number(cb);
+ return false;
 }
 function teacherOwnsClass(c){
- if(session?.tipo!=="teacher" || !c)return false;
- if(teacherIdMatches(c.profId,session.teacherId))return true;
- const t=db.teachers.find(x=>teacherIdMatches(x.id,session.teacherId));
- if(!t)return false;
- const classTeacherName=String(c.professora||c.professor||c.professoraNome||c.professorNome||c.teacherName||c.nomeProfessora||"").trim().toLowerCase();
- const teacherName=String(t.nome||"").trim().toLowerCase();
- return classTeacherName!=="" && teacherName!=="" && classTeacherName===teacherName;
+ if(session?.tipo!=="teacher"||!c)return false;
+ const sid=String(session.teacherId||session.id||"").replace(/^prof:/i,"").trim();
+ const teacher=db.teachers.find(t=>teacherIdMatches(t.id,sid)||String(t.login||"").trim().toLowerCase()===String(session.nome||"").trim().toLowerCase());
+ const teacherIds=teacher?[teacher.id,teacher.login,teacher.apelido,teacher.email]:[];
+ teacherIds.push(session.teacherId,session.id);
+ const classIds=[c.profId,c.professorId,c.professoraId,c.teacherId,c.idProfessor,c.idProfessora];
+ if(classIds.some(cid=>teacherIds.some(tid=>teacherIdMatches(cid,tid))))return true;
+ const classNames=[c.professora,c.professor,c.professoraNome,c.professorNome,c.teacherName,c.nomeProfessora,c.nomeProfessor,c.professoraResponsavel,c.professorResponsavel,c.teacher].map(v=>String(v??"").trim().toLowerCase()).filter(Boolean);
+ const teacherNames=teacher?[teacher.nome,teacher.apelido,teacher.login,session.nome].map(v=>String(v??"").trim().toLowerCase()).filter(Boolean):[String(session.nome||"").trim().toLowerCase()];
+ return classNames.some(n=>teacherNames.includes(n));
 }
 function teacherOwnsStudent(s){
  if(session?.tipo!=="teacher")return true;
