@@ -264,11 +264,11 @@ let savedSession=sessionStorage.getItem("fenix_session"); if(savedSession){const
 
 function applyAccess(){
  const teacher=session?.tipo==="teacher";
- const allowed=teacher?["alunos"]:["painel","alunos","professores","turmas","presenca","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];
+ const allowed=teacher?["alunos","turmas","presenca","busca"]:["painel","alunos","professores","turmas","presenca","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];
  document.querySelectorAll(".nav button[data-view]").forEach(b=>{b.style.display=allowed.includes(b.dataset.view)?"":"none"});
- if(!allowed.includes(view))view="painel";
+ if(!allowed.includes(view))view=teacher?"alunos":"painel";
 }
-function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos"]:["painel","alunos","professores","turmas","presenca","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];if(!allowed.includes(v))return;view=v;render()}
+function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos","turmas","presenca","busca"]:["painel","alunos","professores","turmas","presenca","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];if(!allowed.includes(v))return;view=v;render()}
 function render(){
  document.querySelectorAll(".nav button[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
  document.getElementById("page").innerHTML=V[view]?V[view]():V.painel(); bind();
