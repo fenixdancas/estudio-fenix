@@ -272,7 +272,13 @@ function teacherIdMatches(a,b){
  return na!=="" && nb!=="" && (na===nb || Number(na)===Number(nb));
 }
 function teacherOwnsClass(c){
- return !!(session?.tipo==="teacher" && c && teacherIdMatches(c.profId,session.teacherId));
+ if(session?.tipo!=="teacher" || !c)return false;
+ if(teacherIdMatches(c.profId,session.teacherId))return true;
+ const t=db.teachers.find(x=>teacherIdMatches(x.id,session.teacherId));
+ if(!t)return false;
+ const classTeacherName=String(c.professora||c.professor||c.professoraNome||c.professorNome||c.teacherName||c.nomeProfessora||"").trim().toLowerCase();
+ const teacherName=String(t.nome||"").trim().toLowerCase();
+ return classTeacherName!=="" && teacherName!=="" && classTeacherName===teacherName;
 }
 function teacherOwnsStudent(s){
  if(session?.tipo!=="teacher")return true;
