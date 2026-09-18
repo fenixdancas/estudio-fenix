@@ -201,8 +201,66 @@ const dateBR=d=>d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"";
 const nowISO=()=>new Date().toISOString().slice(0,10);
 const esc=s=>String(s??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
 const uid=()=>Date.now()+Math.floor(Math.random()*1000);
-ensureInitialTeachers();
-function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+const SHARED_DB_URL = "https://script.google.com/macros/s/AKfycbxTzipsmJNldoYBcedui3uUzyQDvoRrMAdreMnEVncBCU9mLWiytX8H2Knj7aMzKOB3/exec";
+const SHARED_DB_TOKEN = "FenixCompartilhado_2026_9X7p";
+let sharedReady = false;
+let remoteSaveTimer = null;
+let remoteSaveBusy = false;
+
+function saveLocalOnly(){ try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){} }
+function save(){
+  saveLocalOnly();
+  if(sharedReady && SHARED_DB_URL.startsWith("http")) scheduleSharedSave();
+}
+function scheduleSharedSave(){
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer=setTimeout(pushSharedDb,700);
+}
+function pushSharedDb(){
+  if(!sharedReady || !SHARED_DB_URL.startsWith("http") || remoteSaveBusy) return;
+  remoteSaveBusy=true;
+  const body=new URLSearchParams({token:SHARED_DB_TOKEN,action:"save",db:JSON.stringify(db)});
+  fetch(SHARED_DB_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body:body.toString(),keepalive:true})
+    .catch(()=>{})
+    .finally(()=>{remoteSaveBusy=false;});
+}
+function loadSharedDb(done){
+  if(!SHARED_DB_URL.startsWith("http")){done();return}
+  const cb="fenixShared_"+Date.now()+"_"+Math.floor(Math.random()*10000);
+  let finished=false;
+  const finish=(remote)=>{
+    if(finished)return; finished=true;
+    try{delete window[cb]}catch(e){}
+    const sc=document.getElementById(cb); if(sc)sc.remove();
+    if(remote && remote.ok && remote.db){
+      db=remote.db;
+      saveLocalOnly();
+      sharedReady=true;
+      done();
+      return;
+    }
+    if(remote && remote.ok && !remote.db){
+      sharedReady=true;
+      saveLocalOnly();
+      pushSharedDb();
+      done();
+      return;
+    }
+    done();
+  };
+  window[cb]=r=>finish(r);
+  const sc=document.createElement("script"); sc.id=cb;
+  sc.src=SHARED_DB_URL+"?action=load&token="+encodeURIComponent(SHARED_DB_TOKEN)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
+  sc.onerror=()=>finish(null);
+  document.body.appendChild(sc);
+  setTimeout(()=>finish(null),10000);
+}
+function startFenix(){
+  loadSharedDb(()=>{
+    ensureInitialTeachers();
+    renderLogin();
+  });
+}
 function log(action,detail){db.history.push({id:uid(),at:new Date().toISOString(),user:session?.nome||"Sistema",action,detail});save()}
 function openM(title,body,wide=true){document.getElementById("modalbox").innerHTML=`<div class="modal-head"><h2>${title}</h2><button class="btn" onclick="closeM()">Fechar</button></div>${body}`;document.getElementById("modal").classList.add("open")}
 function closeM(){document.getElementById("modal").classList.remove("open")}
@@ -210,7 +268,7 @@ document.getElementById("modal").onclick=e=>{if(e.target.id==="modal")closeM()}
 
 document.getElementById("loginArt").src=LOGIN_ART; document.getElementById("sideLogo").src=LOGO;
 document.getElementById("sideFe").src=FE;
-renderLogin();
+startFenix();
 function allLoginUsers(){
  const a=[{id:"nahid",nome:"Nahid",tipo:"admin",senha:db.users.nahid?.senha||""},{id:"tati",nome:"Tati",tipo:"admin",senha:db.users.tati?.senha||""}];
  db.teachers.forEach(t=>{if(t.login)a.push({id:"prof:"+t.id,nome:t.nome,tipo:"teacher",senha:t.senha||"",teacherId:t.id,ativo:t.acessoAtivo!==false})});
