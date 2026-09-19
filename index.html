@@ -220,9 +220,16 @@ function carregarDbNuvem(aoTerminar){
  window[callback]=function(dados){
    try{
      if(dados && typeof dados==="object" && !dados.erro && dados.users && dados.students){
-       db=dados;
-       localStorage.setItem(KEY,JSON.stringify(db));
-       if(aoTerminar)aoTerminar(true);
+       const novo=(dados.teachers||[]).length+(dados.classes||[]).length+(dados.students||[]).length;
+       const atual=(db.teachers||[]).length+(db.classes||[]).length+(db.students||[]).length;
+       if(novo>=atual){
+         db=dados;
+         localStorage.setItem(KEY,JSON.stringify(db));
+         if(aoTerminar)aoTerminar(true);
+       }else{
+         console.warn("Dados da nuvem pareciam mais vazios que os locais; mantendo os dados locais por segurança.");
+         if(aoTerminar)aoTerminar(false);
+       }
      }else{
        if(aoTerminar)aoTerminar(false);
      }
@@ -470,8 +477,12 @@ function novaMatricula(id){
 
  <div id="etapa4" class="full section-title">⑦ Ficha de saúde</div>
  <div class="field"><label>Tabagismo</label><div class="actions">${yesno("tabagismo",s.tabagismo)}</div></div>
- <div class="field"><label>Alergias</label><div class="actions">${yesno("alergias",s.alergias)}</div></div>
- <div class="field"><label>Cirurgias</label><div class="actions">${yesno("cirurgias",s.cirurgias)}</div></div>
+ <div class="field"><label>Alergias</label><div class="actions">${yesno("alergias",s.alergias)}</div>
+ <input id="alergiaDetalhe" name="alergiaDetalhe" value="${esc(s.alergiaDetalhe||"")}" placeholder="Qual alergia?" style="margin-top:8px;${s.alergias==="Sim"?"":"display:none"}">
+ </div>
+ <div class="field"><label>Cirurgias</label><div class="actions">${yesno("cirurgias",s.cirurgias)}</div>
+ <input id="cirurgiaDetalhe" name="cirurgiaDetalhe" value="${esc(s.cirurgiaDetalhe||"")}" placeholder="Qual cirurgia?" style="margin-top:8px;${s.cirurgias==="Sim"?"":"display:none"}">
+ </div>
  <div class="field"><label>Fobias</label><div class="actions">${yesno("fobias",s.fobias)}</div>
  <input id="fobiaDetalhe" name="fobiaDetalhe" value="${esc(s.fobiaDetalhe||"")}" placeholder="Qual fobia?" style="margin-top:8px;${s.fobias==="Sim"?"":"display:none"}">
  </div>
@@ -491,6 +502,8 @@ function novaMatricula(id){
  </form>`);
  document.getElementById("studentPhoto").onchange=e=>previewPhoto(e,"studentPhotoPreview");
  document.querySelectorAll('input[name="fobias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("fobiaDetalhe");if(d)d.style.display=document.querySelector('input[name="fobias"]:checked')?.value==="Sim"?"":"none"});
+document.querySelectorAll('input[name="alergias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("alergiaDetalhe");if(d)d.style.display=document.querySelector('input[name="alergias"]:checked')?.value==="Sim"?"":"none"});
+document.querySelectorAll('input[name="cirurgias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("cirurgiaDetalhe");if(d)d.style.display=document.querySelector('input[name="cirurgias"]:checked')?.value==="Sim"?"":"none"});
  document.getElementById("studentForm").onsubmit=e=>{e.preventDefault();saveAluno(e,id)};
 }
 function collectChecks(fd,name){return fd.getAll(name)}
