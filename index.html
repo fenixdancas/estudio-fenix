@@ -247,6 +247,7 @@ document.getElementById("modal").onclick=e=>{if(e.target.id==="modal")closeM()}
 document.getElementById("loginArt").src=LOGIN_ART; document.getElementById("sideLogo").src=LOGO;
 document.getElementById("sideFe").src=FE;
 renderLogin();
+carregarDbNuvem(function(atualizou){if(atualizou){renderLogin()}});
 function allLoginUsers(){
  const a=[{id:"nahid",nome:"Nahid",tipo:"admin",senha:db.users.nahid?.senha||""},{id:"tati",nome:"Tati",tipo:"admin",senha:db.users.tati?.senha||""}];
  db.teachers.forEach(t=>{if(t.login)a.push({id:"prof:"+t.id,nome:t.nome,tipo:"teacher",senha:t.senha||"",teacherId:t.id,ativo:t.acessoAtivo!==false})});
