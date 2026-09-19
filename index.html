@@ -140,7 +140,6 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
       <button data-view="mensalidades">▣ <span>Mensalidades</span></button>
       <button data-view="contas">▤ <span>Contas a pagar</span></button>
       <button data-view="financeiro">◈ <span>Financeiro</span></button>
-      <button data-view="contratos">▧ <span>Contratos</span></button>
       <button data-view="eventos">◇ <span>Eventos</span></button>
       <button data-view="aniversarios">☆ <span>Aniversários e datas</span></button>
       <div class="nav-title">Consulta</div>
@@ -157,7 +156,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
       <div class="top-right"><span id="today"></span><div class="user-pill"><div id="avatar" class="avatar">N</div><span id="loggedName"></span></div></div>
     </header>
     <section id="page" class="page"></section>
-    <div class="footer-note">Estúdio de Danças Fênix • Gestão do Estúdio</div>
+    <div class="footer-note">Estúdio de Danças Fênix • sistema local do estúdio</div>
   </main>
 </div>
 
@@ -184,14 +183,20 @@ let db = JSON.parse(localStorage.getItem(KEY)||"null") || DEFAULT;
 // Perfis docentes iniciais. Não substitui cadastros existentes.
 function ensureInitialTeachers(){
  const initial=[
-  {nome:"Alexandra Braga",login:"alexandra",acessoAtivo:true},
-  {nome:"Rawnie El Lamya",login:"rawnie",acessoAtivo:true}
+  {nome:"Nahid",login:"nahid",tipo:"admin",acessoAtivo:true},
+  {nome:"Tati",login:"tati",tipo:"admin",acessoAtivo:true},
+  {nome:"Alexandra Braga",apelido:"Alê",login:"alexandra",acessoAtivo:true},
+  {nome:"Rawnie El Lamya",apelido:"Rawnie",login:"rawnie",acessoAtivo:true}
  ];
  if(!Array.isArray(db.teachers)) db.teachers=[];
  initial.forEach(base=>{
   let t=db.teachers.find(x=>String(x.nome||"").trim().toLowerCase()===base.nome.toLowerCase());
-  if(!t){t={id:uid(),nome:base.nome,apelido:"",cpf:"",fone:"",email:"",obs:"",login:base.login,senha:"",acessoAtivo:true,foto:""};db.teachers.push(t);}
-  else if(!t.login) t.login=base.login;
+  if(!t){t={id:uid(),nome:base.nome,apelido:base.apelido||"",cpf:"",fone:"",email:"",obs:"",login:base.login,senha:"",acessoAtivo:true,foto:"",tipo:base.tipo||"teacher"};db.teachers.push(t);}
+  else {
+   if(!t.login) t.login=base.login;
+   if(base.apelido && !t.apelido) t.apelido=base.apelido;
+   if(base.tipo && !t.tipo) t.tipo=base.tipo;
+  }
   if(t.acessoAtivo===undefined) t.acessoAtivo=true;
  });
  save();
@@ -225,28 +230,42 @@ function pushSharedDb(){
     .catch(()=>{})
     .finally(()=>{remoteSaveBusy=false;});
 }
+function dbRecordCount(x){
+  if(!x||typeof x!=="object")return 0;
+  return ["students","teachers","classes","payments","expenses","events","commemorative","attendance","history"].reduce((n,k)=>n+(Array.isArray(x[k])?x[k].length:0),0);
+}
 function loadSharedDb(done){
   if(!SHARED_DB_URL.startsWith("http")){done();return}
+  const localRaw=localStorage.getItem(KEY);
+  const backupRaw=localStorage.getItem(KEY+"_backup");
+  let localDb=null, backupDb=null;
+  try{localDb=localRaw?JSON.parse(localRaw):null}catch(e){}
+  try{backupDb=backupRaw?JSON.parse(backupRaw):null}catch(e){}
+  const localBest=dbRecordCount(backupDb)>dbRecordCount(localDb)?backupDb:localDb;
   const cb="fenixShared_"+Date.now()+"_"+Math.floor(Math.random()*10000);
   let finished=false;
   const finish=(remote)=>{
     if(finished)return; finished=true;
     try{delete window[cb]}catch(e){}
     const sc=document.getElementById(cb); if(sc)sc.remove();
-    if(remote && remote.ok && remote.db){
-      db=remote.db;
+    const remoteDb=remote&&remote.ok&&remote.db?remote.db:null;
+    const remoteCount=dbRecordCount(remoteDb), localCount=dbRecordCount(localBest);
+    if(remoteDb && (remoteCount>=localCount || localCount===0)){
+      db=remoteDb;
       saveLocalOnly();
       sharedReady=true;
       done();
       return;
     }
-    if(remote && remote.ok && !remote.db){
-      sharedReady=true;
+    if(localBest){
+      db=localBest;
       saveLocalOnly();
+      sharedReady=true;
       pushSharedDb();
       done();
       return;
     }
+    sharedReady=true;
     done();
   };
   window[cb]=r=>finish(r && r.users ? {ok:true,db:r} : r);
@@ -374,7 +393,6 @@ function tableEmpty(cols,msg="Nenhum registro cadastrado."){return `<tr><td cols
 
 const V={
 painel:()=>{
- const m=nowISO().slice(0,7), inc=db.payments.filter(p=>p.pago&&p.data?.startsWith(m)).reduce((a,p)=>a+Number(p.valor),0), out=db.expenses.filter(e=>e.pago&&e.data?.startsWith(m)).reduce((a,e)=>a+Number(e.valor),0);
  const pend=db.payments.filter(p=>!p.pago).length;
  const next=new Date();next.setMonth(next.getMonth()+1);const nm=String(next.getMonth()+1).padStart(2,"0");
  const b=db.students.filter(s=>s.nasc?.slice(5,7)===nm).sort((a,b)=>a.nasc.localeCompare(b.nasc));
@@ -382,7 +400,7 @@ painel:()=>{
  const upcoming=db.expenses.filter(e=>!e.pago).sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).slice(0,5);
  return head("Painel","Visão geral do estúdio.")+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
- <div class="cards"><div class="card"><div class="label">Alunos ativos</div><div class="num">${db.students.length}</div></div><div class="card"><div class="label">Entradas no mês</div><div class="num">${money(inc)}</div></div><div class="card"><div class="label">Despesas no mês</div><div class="num">${money(out)}</div></div><div class="card"><div class="label">Mensalidades pendentes</div><div class="num">${pend}</div></div></div>
+ <div class="cards"><div class="card"><div class="label">Alunos ativos</div><div class="num">${db.students.length}</div></div><div class="card"><div class="label">Mensalidades pendentes</div><div class="num">${pend}</div></div></div>
  <div class="panel"><h2>Aniversários do próximo mês</h2>${b.length?b.map(s=>`<p>${s.nasc.slice(8,10)}/${nm} · <strong>${esc(s.nome)}</strong></p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para o próximo mês.</p>`}</div>
  <div class="panel"><h2>Datas comemorativas do próximo mês</h2>${commemorativeNext.length?commemorativeNext.map(c=>`<p>${c.data.slice(8,10)}/${nm} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para o próximo mês.</p>`}</div>
  <div class="panel"><h2>Próximas contas a pagar</h2><table><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr>${upcoming.map(e=>`<tr><td>${esc(e.nome)}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td><span class="badge pending">Pendente</span></td></tr>`).join("")||tableEmpty(4)}</table></div>`;
@@ -700,122 +718,209 @@ function consultarAceiteOnline(id){
 function savePasswords(){let a=document.getElementById("passNahid").value,b=document.getElementById("passTati").value;if(!a||!b){alert("As duas senhas precisam ser preenchidas.");return}db.users.nahid.senha=a;db.users.tati.senha=b;save();log("Senhas atualizadas","Nahid e Tati");alert("Senhas salvas.")}
 function exportBackup(){let blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="backup_estudio_fenix.json";a.click();URL.revokeObjectURL(url)}
 function importBackup(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.users||!x.students||!x.history)throw 0;db=x;save();alert("Backup importado. A página será atualizada.");location.reload()}catch(_){alert("Arquivo de backup inválido.")}};r.readAsText(f)}
-
-/* ===== CONSOLIDAÇÃO DO REGISTRO DE CONTINUIDADE • 19/09/2026 ===== */
+</script>
+<script id="fenix-spec-consolidado-2026-09-19">
 (function(){
-  const oldSaveAluno = window.saveAluno;
-  const feriadosFixos = [];
-  function addDays(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)}
-  function nextBusinessDay(iso){let x=new Date(iso+'T12:00:00');while(x.getDay()===0||x.getDay()===6||feriadosFixos.includes(x.toISOString().slice(0,10)))x.setDate(x.getDate()+1);return x.toISOString().slice(0,10)}
-  function vencimentoPorMatricula(iso){
-    const day=Number(String(iso||'').slice(8,10));
-    if(!day)return '';
-    const base=day<=10?10:(day<=15?15:30);
-    const ym=String(iso).slice(0,7);
-    let y=Number(ym.slice(0,4)),m=Number(ym.slice(5,7));
-    if(base===30){const last=new Date(y,m,0).getDate();return nextBusinessDay(`${y}-${String(m).padStart(2,'0')}-${String(Math.min(30,last)).padStart(2,'0')}`)}
-    return nextBusinessDay(`${y}-${String(m).padStart(2,'0')}-${String(base).padStart(2,'0')}`);
-  }
-  function pacoteParaAluno(s){
-    const n=Array.isArray(s.turmaIds)?s.turmaIds.length:(s.turmaId?1:0);
-    const infantil=(s.modalidades||[]).some(x=>String(x).toLowerCase().includes('infantil'));
-    if(n>=4 || (n>=1 && s.pacote==='Plus')) return {nome:'Plus',valor:500};
-    if(n===3)return {nome:'3 aulas por semana',valor:335};
-    if(n===2)return {nome:'2 aulas por semana',valor:255};
-    if(n===1)return {nome:infantil?'1 aula por semana':'1 aula por semana',valor:150};
-    return {nome:'',valor:0};
-  }
+  const SPEC_VERSION = "2026-09-19";
+  const PACKAGES = {
+    "1": {nome:"1 aula por semana", valor:150},
+    "2": {nome:"2 aulas por semana", valor:255},
+    "3": {nome:"3 aulas por semana", valor:335},
+    "plus": {nome:"Plus", valor:500}
+  };
+  const COMM_KEY = "fenix_spec_version";
+  const __novaMatriculaOriginal = window.novaMatricula;
+  const __novaTurmaOriginal = window.novaTurma;
+  const __novoProfessorOriginal = window.novoProfessor;
+  const __novaPresencaOriginal = window.novaPresenca;
+  const __novaMensalidadeOriginal = window.novaMensalidade;
+  const __novoEventoOriginal = window.novoEvento;
+
+  function ensureArray(obj,key){if(!Array.isArray(obj[key]))obj[key]=[]}
   function migrate(){
-    db.users=db.users||{nahid:{nome:'Nahid',tipo:'admin',senha:''},tati:{nome:'Tati',tipo:'admin',senha:''}};
-    ['students','teachers','classes','payments','expenses','events','commemorative','attendance','history'].forEach(k=>{if(!Array.isArray(db[k]))db[k]=[]});
-    db.teachers.forEach(t=>{if(String(t.nome||'').toLowerCase()==='alexandra braga' && !t.apelido)t.apelido='Alê'; if(t.acessoAtivo===undefined)t.acessoAtivo=true; if(!Array.isArray(t.modalidades))t.modalidades=t.modalidade?[t.modalidade]:[];});
-    db.students.forEach(s=>{if(s.ativo===undefined)s.ativo=true;if(!s.dataMatricula)s.dataMatricula=s.dataMatricula||'';if(!Array.isArray(s.observacoes))s.observacoes=[];if(!s.saudeAtualizadaEm)s.saudeAtualizadaEm=s.dataMatricula||'';if(!s.statusMatricula)s.statusMatricula=s.ativo===false?'inativa':'ativa';});
-    db.classes.forEach(c=>{if(c.ativo===undefined)c.ativo=true;if(c.limite===undefined)c.limite=0;if(c.observacao===undefined)c.observacao='';});
-    db.events.forEach(e=>{if(e.turmaId===undefined)e.turmaId='';});
+    db.users=db.users||{nahid:{nome:"Nahid",tipo:"admin",senha:""},tati:{nome:"Tati",tipo:"admin",senha:""}};
+    ["students","teachers","classes","payments","expenses","events","commemorative","attendance","history"].forEach(k=>ensureArray(db,k));
+    ensureArray(db,"communication"); ensureArray(db,"timeline");
+    db.teachers.forEach(t=>{
+      if(t.dataNascimento===undefined)t.dataNascimento="";
+      if(!Array.isArray(t.modalidades))t.modalidades=t.modalidade?[t.modalidade]:[];
+      if(t.status===undefined)t.status=t.acessoAtivo===false?"inativo":"ativo";
+      if(t.acessoAtivo===undefined)t.acessoAtivo=t.status!=="inativo";
+    });
+    db.students.forEach(s=>{
+      if(s.status===undefined)s.status="ativo";
+      if(s.dataMatricula===undefined)s.dataMatricula=nowISO();
+      if(s.dataCancelamento===undefined)s.dataCancelamento="";
+      if(s.motivoCancelamento===undefined)s.motivoCancelamento="";
+      if(s.healthUpdatedAt===undefined)s.healthUpdatedAt=s.dataSaudeAtualizada||s.dataMatricula||"";
+      if(!Array.isArray(s.observacoes))s.observacoes=[];
+      if(!Array.isArray(s.timeline))s.timeline=[];
+      if(!s.pacote){
+        const n=Number(s.mensalidade||0); s.pacote=n===150?"1":n===255?"2":n===335?"3":n===500?"plus":"";
+      }
+      if(s.turmaIds===undefined)s.turmaIds=s.turmaId?[s.turmaId]:[];
+    });
+    db.classes.forEach(c=>{
+      if(c.status===undefined)c.status="ativo";
+      if(c.limite===undefined)c.limite=0;
+      if(c.obs===undefined)c.obs="";
+      if(!Array.isArray(c.historico))c.historico=[];
+      if(!Array.isArray(c.listaEspera))c.listaEspera=[];
+    });
+    db.payments.forEach(p=>{if(p.status===undefined)p.status=p.pago?"quitada":"pendente"; if(p.juros===undefined)p.juros=0;if(p.multa===undefined)p.multa=0;if(p.valorAtualizado===undefined)p.valorAtualizado=Number(p.valor||0)});
+    db.events.forEach(e=>{if(e.horario===undefined)e.horario="";if(e.turmaId===undefined)e.turmaId="";if(e.observacao===undefined)e.observacao=e.obs||""});
+    db.__specVersion=SPEC_VERSION;
+    try{localStorage.setItem(COMM_KEY,SPEC_VERSION)}catch(e){}
     saveLocalOnly();
   }
   migrate();
 
-  const oldTeacher = window.novoProfessor;
-  window.novoProfessor=function(id){
-    let t=db.teachers.find(x=>x.id==id)||{nome:'',apelido:'',cpf:'',fone:'',email:'',obs:'',login:'',senha:'',acessoAtivo:true,foto:'',modalidades:[]};
-    const mods=['Ballet','Dança do Ventre','Jazz','Infantil'];
-    openM(id?'Editar professora':'Nova professora',`<form id="profForm" class="form-grid">
-      <div class="field full"><label>Nome completo *</label><input name="nome" required value="${esc(t.nome)}"></div>
-      <div class="field"><label>Nome exibido</label><input name="apelido" value="${esc(t.apelido||'')}"></div>
-      <div class="field"><label>Telefone / WhatsApp</label><input name="fone" value="${esc(t.fone||'')}"></div>
-      <div class="field"><label>Data de nascimento</label><input type="date" name="nascimento" value="${esc(t.nascimento||'')}"></div>
-      <div class="field"><label>E-mail</label><input name="email" value="${esc(t.email||'')}"></div>
-      <div class="field full"><label>Modalidade(s) que leciona</label><div class="modalidades-grid">${mods.map(m=>`<label class="modalidade-check"><input type="checkbox" name="modalidades" value="${esc(m)}" ${(t.modalidades||[]).includes(m)?'checked':''}> ${esc(m)}</label>`).join('')}</div></div>
-      <div class="field"><label>Usuário de acesso</label><input name="login" value="${esc(t.login||'')}"></div>
-      <div class="field"><label>Acesso</label><select name="acessoAtivo"><option value="true" ${t.acessoAtivo!==false?'selected':''}>Ativo</option><option value="false" ${t.acessoAtivo===false?'selected':''}>Inativo</option></select></div>
-      <div class="field full"><label>Observação</label><textarea name="obs">${esc(t.obs||'')}</textarea></div>
-      <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar professora</button></div></form>`);
-    document.getElementById('profForm').onsubmit=e=>{e.preventDefault();const fd=new FormData(e.currentTarget),o=Object.fromEntries(fd.entries());o.modalidades=collectChecks(fd,'modalidades');o.acessoAtivo=o.acessoAtivo!=='false';o.id=id||uid();o.foto=t.foto||'';o.senha=t.senha||'';if(id)Object.assign(db.teachers.find(x=>x.id==id),o);else db.teachers.push(o);log(id?'Professora atualizada':'Professora cadastrada',o.nome);save();closeM();render()};
+  window.FENIX_SPEC = {
+    version: SPEC_VERSION,
+    publishedUrl: "https://fenixdancas.github.io/estudio-fenix/",
+    repository: "fenixdancas/estudio-fenix",
+    packages: PACKAGES,
+    roles:{admin:["painel","alunos","professores","turmas","presenca","mensalidades","contas","financeiro","contratos","eventos","aniversarios","busca","historico","config"],teacher:["alunos","turmas","presenca","busca"]}
   };
 
-  const oldTurma = window.novaTurma;
-  window.novaTurma=function(id){
-    let c=db.classes.find(x=>x.id==id)||{nome:'',modalidade:'Ballet',dia:'Segunda',hora:'18:00',profId:'',ativo:true,limite:0,observacao:''};
-    const mods=['Ballet','Dança do Ventre','Jazz','Infantil'],dias=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-    openM(id?'Editar turma':'Nova turma',`<form id="classForm" class="form-grid">
-      <div class="field full"><label>Nome da turma *</label><input name="nome" required value="${esc(c.nome)}"></div>
-      <div class="field"><label>Modalidade *</label><select name="modalidade">${mods.map(x=>`<option ${c.modalidade===x?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="field"><label>Dia *</label><select name="dia">${dias.map(x=>`<option ${c.dia===x?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="field"><label>Horário *</label><input type="time" name="hora" value="${esc(c.hora||'18:00')}" required></div>
-      <div class="field"><label>Professora responsável *</label><select name="profId" required><option value="">Selecione</option>${db.teachers.map(t=>`<option value="${t.id}" ${c.profId==t.id?'selected':''}>${esc(t.apelido||t.nome)}</option>`).join('')}</select></div>
-      <div class="field"><label>Limite de alunos</label><input type="number" min="0" name="limite" value="${Number(c.limite||0)}"></div>
-      <div class="field"><label>Status</label><select name="ativo"><option value="true" ${c.ativo!==false?'selected':''}>Ativa</option><option value="false" ${c.ativo===false?'selected':''}>Inativa</option></select></div>
-      <div class="field full"><label>Observação da turma</label><textarea name="observacao">${esc(c.observacao||'')}</textarea></div>
-      <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar turma</button></div></form>`);
-    document.getElementById('classForm').onsubmit=e=>{e.preventDefault();const fd=new FormData(e.currentTarget),o=Object.fromEntries(fd.entries());o.id=id||uid();o.limite=Number(o.limite||0);o.ativo=o.ativo!=='false';o.profId=Number(o.profId);const conflict=db.classes.find(x=>x.id!=o.id&&x.ativo!==false&&o.ativo&&x.dia===o.dia&&x.hora===o.hora);if(conflict){alert('Já existe outra turma nesse dia e horário.');return}if(id){const old=db.classes.find(x=>x.id==id);if(old.profId!=o.profId)log('Professora da turma alterada',`${old.profId} → ${o.profId}`);Object.assign(old,o)}else db.classes.push(o);log(id?'Turma atualizada':'Turma cadastrada',o.nome);save();closeM();render()};
+  function sixMonthsAgo(){const d=new Date();d.setMonth(d.getMonth()-6);return d}
+  function healthExpired(s){if(!s.healthUpdatedAt)return true; const d=new Date(s.healthUpdatedAt+"T12:00:00");return Number.isNaN(d.getTime())||d<sixMonthsAgo()}
+  function activeStudentsForClass(c){return db.students.filter(s=>s.status!=="inativo"&&(Array.isArray(s.turmaIds)?s.turmaIds:[s.turmaId]).some(id=>teacherIdMatches(id,c.id)))}
+  function overduePayment(p){if(p.pago||p.status==="quitada"||!p.venc)return false;const due=new Date(p.venc+"T23:59:59");return new Date()>due}
+  function updatedCommunication(entry){db.communication.push({...entry,id:uid(),at:new Date().toISOString(),user:session?.nome||"Sistema"});save()}
+  function timeline(s,action,detail){if(!s)return; if(!Array.isArray(s.timeline))s.timeline=[];s.timeline.push({id:uid(),at:new Date().toISOString(),action,detail,user:session?.nome||"Sistema"});}
+  function openWhatsAppDirect(item){
+    const phone=(item.fone||item.respFone||"").replace(/\D/g,"");
+    const text=item.whatsText||"Olá!";
+    if(!phone){alert("Não há telefone/WhatsApp cadastrado para este contato.");return}
+    window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(text),"_blank","noopener");
+    updatedCommunication({contato:item.nome||"",telefone:phone,tipo:item.tipo||"Comunicado",conteudo:text,canal:"WhatsApp",situacao:"aberto no WhatsApp"});
+  }
+  window.openWhatsAppDirect=openWhatsAppDirect;
+
+  function dashboard(){
+    const overdue=db.payments.filter(overduePayment);
+    const contracts=db.students.filter(s=>s.status!=="inativo"&&!s.contratoAceito);
+    const health=db.students.filter(s=>s.status!=="inativo"&&healthExpired(s));
+    const wait=db.classes.filter(c=>c.status!=="inativo"&&c.listaEspera?.length&&Number(c.limite)>0&&activeStudentsForClass(c).length<Number(c.limite));
+    const today=new Date(); const next=new Date(today);next.setDate(next.getDate()+7);
+    const birthdays=db.students.filter(s=>s.status!=="inativo"&&s.nasc).filter(s=>{const d=new Date(today.getFullYear(),Number(s.nasc.slice(5,7))-1,Number(s.nasc.slice(8,10)));if(d<new Date(today.getFullYear(),today.getMonth(),today.getDate()))d.setFullYear(today.getFullYear()+1);return d>=today&&d<=next}).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5)));
+    const item=(title,count,cls,body)=>`<div class="panel spec-alert ${cls||""}"><div class="spec-alert-head"><h2>${title}</h2><span class="badge ${count?"pending":"ok"}">${count}</span></div>${body||"<p class='muted'>Nenhum item pendente.</p>"}</div>`;
+    const rows=(arr,fn)=>arr.length?`<div class="spec-list">${arr.map(fn).join("")}</div>`:`<p class="muted">Nenhum item pendente.</p>`;
+    return head("Painel","Acompanhe somente o que exige atenção administrativa.")+
+      item("Mensalidades atrasadas",overdue.length,"danger",rows(overdue,p=>`<div><strong>${esc(p.aluno||"Aluna")}</strong><span>${dateBR(p.venc)} · ${money(p.valorAtualizado||p.valor)}</span></div>`))+
+      item("Contratos pendentes",contracts.length,"",rows(contracts,s=>`<div><strong>${esc(s.nome)}</strong><span>${esc(s.email||s.respFone||s.fone||"Sem contato cadastrado")}</span></div>`))+
+      item("Fichas de saúde vencidas",health.length,"",rows(health,s=>`<div><strong>${esc(s.nome)}</strong><span>Atualização: ${dateBR(s.healthUpdatedAt)||"não registrada"}</span></div>`))+
+      item("Vagas para lista de espera",wait.length,"",rows(wait,c=>`<div><strong>${esc(c.nome)}</strong><span>${activeStudentsForClass(c).length}/${c.limite} alunos</span></div>`))+
+      item("Aniversários nos próximos 7 dias",birthdays.length,"",rows(birthdays,s=>`<div><strong>${esc(s.nome)}</strong><span>${s.nasc.slice(8,10)}/${s.nasc.slice(5,7)}</span></div>`));
+  }
+  V.painel=dashboard;
+
+  function studentView(){
+    const baseHead=head("Alunas","Cadastre, consulte e preserve o histórico das matrículas.",`<button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button>`);
+    const list=visibleStudents().slice().sort((a,b)=>String(a.nome||"").localeCompare(String(b.nome||"")));
+    return baseHead+`<div class="panel"><div class="toolbar"><input id="studentSearch" class="search" placeholder="Buscar por nome ou telefone"><select id="studentStatusFilter" style="max-width:180px"><option value="">Todas</option><option value="ativo">Ativas</option><option value="inativo">Inativas</option></select></div><div id="studentTable"></div></div>`;
+  }
+  V.alunos=studentView;
+
+  function drawStudentTable(){
+    const input=document.getElementById("studentSearch"), filter=document.getElementById("studentStatusFilter"), out=document.getElementById("studentTable"); if(!input||!out)return;
+    const draw=()=>{const q=(input.value||"").toLowerCase().trim(), sf=filter.value;let a=visibleStudents().filter(s=>(!sf||s.status===sf)&&((s.nome||"")+" "+(s.fone||"")).toLowerCase().includes(q));out.innerHTML=`<table><tr><th>Foto</th><th>Nome</th><th>Contato</th><th>Turmas</th><th>Status</th><th></th></tr>${a.map(s=>{const tids=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);const ts=tids.map(id=>db.classes.find(c=>teacherIdMatches(c.id,id))?.nome).filter(Boolean).join(", ");return `<tr><td>${s.foto?`<img class="avatar-img" src="${s.foto}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong><div class="small muted">Matrícula ${esc(s.numeroMatricula||"—")}</div></td><td>${esc(s.fone||"—")}</td><td>${esc(ts||"—")}</td><td><span class="badge ${s.status==="ativo"?"ok":"neutral"}">${s.status==="ativo"?"Ativa":"Inativa"}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`}).join("")||tableEmpty(6)}</table>`};input.oninput=draw;filter.onchange=draw;draw();
+  }
+
+  const __bindOriginal=window.bind;
+  window.bind=function(){
+    if(typeof __bindOriginal==="function")__bindOriginal();
+    if(view==="alunos")drawStudentTable();
   };
 
-  V.painel=()=>{
-    const atrasadas=db.payments.filter(p=>!p.pago && p.venc && p.venc<nowISO());
-    const contratos=db.students.filter(s=>s.ativo!==false && !s.contratoAceito);
-    const saude=db.students.filter(s=>{const d=s.saudeAtualizadaEm||s.dataMatricula;if(!d)return false;return addDays(d,183)<nowISO()});
-    const vagas=db.classes.filter(c=>c.ativo!==false&&Number(c.limite||0)>db.students.filter(s=>(s.turmaIds||[]).map(Number).includes(Number(c.id))&&s.ativo!==false).length);
-    const n=nowISO().slice(5,7), anivers=db.students.filter(s=>s.ativo!==false&&s.nasc?.slice(5,7)===n);
-    return head('Painel','Alertas que exigem acompanhamento.')+
-      `<div class="panel"><h2>Mensalidades atrasadas</h2>${atrasadas.length?atrasadas.map(p=>`<p>🔴 <strong>${esc(p.aluno)}</strong> · vencimento ${dateBR(p.venc)} · ${money(p.valor)}</p>`).join(''):'<p class="muted">Nenhuma mensalidade atrasada.</p>'}</div>`+
-      `<div class="panel"><h2>Contratos pendentes</h2>${contratos.length?contratos.map(s=>`<p>📄 <strong>${esc(s.nome)}</strong> · <button class="btn" onclick="visualizarContrato(${s.id})">Abrir contrato</button></p>`).join(''):'<p class="muted">Nenhum contrato pendente.</p>'}</div>`+
-      `<div class="panel"><h2>Fichas de saúde vencidas</h2>${saude.length?saude.map(s=>`<p>🩺 <strong>${esc(s.nome)}</strong> · atualização ${dateBR(s.saudeAtualizadaEm)}</p>`).join(''):'<p class="muted">Nenhuma ficha vencida.</p>'}</div>`+
-      `<div class="panel"><h2>Vagas disponíveis</h2>${vagas.length?vagas.map(c=>`<p>🪑 <strong>${esc(c.nome)}</strong> · ${db.students.filter(s=>(s.turmaIds||[]).map(Number).includes(Number(c.id))&&s.ativo!==false).length}/${Number(c.limite)} vagas ocupadas</p>`).join(''):'<p class="muted">Nenhuma vaga disponível para lista de espera.</p>'}</div>`+
-      `<div class="panel"><h2>Aniversários de hoje</h2>${anivers.length?anivers.map(s=>`<p>🎂 <strong>${esc(s.nome)}</strong></p>`).join(''):'<p class="muted">Nenhum aniversário hoje.</p>'}</div>`;
+  window.novaMatricula=function(id){
+    __novaMatriculaOriginal(id);
+    const form=document.getElementById("studentForm"); if(!form)return;
+    const s=db.students.find(x=>x.id==id)||{};
+    const first=document.getElementById("etapa1");
+    if(first&&!document.getElementById("specStudentStatus"))first.insertAdjacentHTML("afterend",`<div class="field"><label>Status da matrícula</label><select name="status" id="specStudentStatus"><option value="ativo" ${s.status!=="inativo"?"selected":""}>Ativa</option><option value="inativo" ${s.status==="inativo"?"selected":""}>Inativa</option></select></div><div class="field"><label>Data de cancelamento</label><input type="date" name="dataCancelamento" value="${esc(s.dataCancelamento||"")}"></div><div class="field full"><label>Motivo do cancelamento</label><input name="motivoCancelamento" value="${esc(s.motivoCancelamento||"")}"></div><div class="field"><label>Pacote</label><select name="pacote" id="specPackage"><option value="">Selecionar</option>${Object.entries(PACKAGES).map(([k,p])=>`<option value="${k}" ${s.pacote===k?"selected":""}>${p.nome} · ${money(p.valor)}</option>`).join("")}</select></div>`);
+    const pkg=document.getElementById("specPackage"), val=form.querySelector('[name="mensalidade"]');
+    if(pkg&&val)pkg.onchange=()=>{if(PACKAGES[pkg.value])val.value=PACKAGES[pkg.value].valor};
   };
 
-  V.professores=()=>head('Professoras','Cadastro, modalidades e status das professoras.',`<button class="btn primary" onclick="novoProfessor()">＋ Nova professora</button>`)+`<div class="panel"><table><tr><th>Nome</th><th>Telefone</th><th>Modalidades</th><th>Status</th><th></th></tr>${db.teachers.map(t=>`<tr><td><strong>${esc(t.apelido||t.nome)}</strong><div class="small muted">${esc(t.nome)}</div></td><td>${esc(t.fone||'—')}</td><td>${esc((t.modalidades||[]).join(', ')||'—')}</td><td>${t.acessoAtivo===false?'<span class="badge pending">Inativa</span>':'<span class="badge ok">Ativa</span>'}</td><td><button class="btn" onclick="novoProfessor(${t.id})">Abrir cadastro</button></td></tr>`).join('')||tableEmpty(5)}</table></div>`;
-
-  V.turmas=()=>{const cs=visibleClasses();return head('Turmas','Modalidade, horário, professora, capacidade e histórico.',session?.tipo==='teacher'?'':`<button class="btn primary" onclick="novaTurma()">＋ Nova turma</button>`)+`<div class="panel"><table><tr><th>Turma</th><th>Modalidade</th><th>Dia</th><th>Horário</th><th>Professora</th><th>Vagas</th><th>Status</th><th></th></tr>${cs.map(c=>{const q=db.students.filter(s=>(s.turmaIds||[]).map(Number).includes(Number(c.id))&&s.ativo!==false).length;return `<tr><td><strong>${esc(c.nome)}</strong></td><td>${esc(c.modalidade)}</td><td>${esc(c.dia)}</td><td>${esc(c.hora)}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,c.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,c.profId))?.nome||'—')}</td><td>${q}/${Number(c.limite||0)||'∞'}</td><td>${c.ativo===false?'<span class="badge pending">Inativa</span>':'<span class="badge ok">Ativa</span>'}</td><td>${session?.tipo==='teacher'?'':`<button class="btn" onclick="novaTurma(${c.id})">Abrir</button>`}</td></tr>`}).join('')||tableEmpty(8)}</table></div>`};
-
-  V.contratos=()=>head('Contratos','Acompanhamento dos contratos enviados e aceitos.')+`<div class="panel"><table><tr><th>Aluna</th><th>E-mail</th><th>Status</th><th>Aceite</th><th></th></tr>${db.students.filter(s=>s.ativo!==false).map(s=>`<tr><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.email||'—')}</td><td>${s.contratoAceito?'<span class="badge ok">Aceito</span>':'<span class="badge pending">Pendente</span>'}</td><td>${s.contratoAceitoEm?new Date(s.contratoAceitoEm).toLocaleString('pt-BR'):'—'}</td><td><button class="btn" onclick="visualizarContrato(${s.id})">Abrir</button></td></tr>`).join('')||tableEmpty(5)}</table></div>`;
-
-  V.eventos=()=>head('Eventos','Eventos vinculados a uma turma.',`<button class="btn primary" onclick="novoEvento()">＋ Novo evento</button>`)+`<div class="panel"><table><tr><th>Evento</th><th>Data</th><th>Horário</th><th>Turma</th><th>Local</th><th></th></tr>${db.events.map(e=>`<tr><td><strong>${esc(e.nome)}</strong></td><td>${dateBR(e.data)}</td><td>${esc(e.hora||'—')}</td><td>${esc(db.classes.find(c=>c.id==e.turmaId)?.nome||'—')}</td><td>${esc(e.local||'—')}</td><td><button class="btn" onclick="novoEvento(${e.id})">Abrir</button></td></tr>`).join('')||tableEmpty(6)}</table></div>`;
-
-  const oldNovoEvento=window.novoEvento;
-  window.novoEvento=function(id){let e=db.events.find(x=>x.id==id)||{nome:'',data:nowISO(),hora:'',local:'',status:'Planejado',obs:'',turmaId:''};openM(id?'Editar evento':'Novo evento',`<form id="eventForm" class="form-grid"><div class="field full"><label>Evento *</label><input name="nome" required value="${esc(e.nome)}"></div><div class="field"><label>Data *</label><input type="date" name="data" required value="${esc(e.data)}"></div><div class="field"><label>Horário</label><input type="time" name="hora" value="${esc(e.hora||'')}"></div><div class="field"><label>Turma *</label><select name="turmaId" required><option value="">Selecione</option>${db.classes.map(c=>`<option value="${c.id}" ${String(e.turmaId)===String(c.id)?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></div><div class="field"><label>Local</label><input name="local" value="${esc(e.local||'')}"></div><div class="field full"><label>Observação</label><textarea name="obs">${esc(e.obs||'')}</textarea></div><div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar evento</button></div></form>`);document.getElementById('eventForm').onsubmit=x=>{x.preventDefault();let o=Object.fromEntries(new FormData(x));o.id=id||uid();if(id)Object.assign(db.events.find(x=>x.id==id),o);else db.events.push(o);log(id?'Evento atualizado':'Evento cadastrado',o.nome);save();closeM();render()}}
-
-  const oldNovaMensalidade=window.novaMensalidade;
-  window.novaMensalidade=function(){if(!db.students.length){alert('Cadastre uma aluna primeiro.');return}openM('Nova mensalidade',`<form id="payForm" class="form-grid"><div class="field full"><label>Aluna *</label><select name="studentId" id="payStudent">${db.students.filter(s=>s.ativo!==false).map(x=>`<option value="${x.id}">${esc(x.nome)}</option>`).join('')}</select></div><div class="field"><label>Competência *</label><input type="month" name="comp" value="${nowISO().slice(0,7)}" required></div><div class="field"><label>Pacote</label><select name="pacote"><option value="1">1 aula por semana · R$ 150,00</option><option value="2">2 aulas por semana · R$ 255,00</option><option value="3">3 aulas por semana · R$ 335,00</option><option value="Plus">Plus · R$ 500,00</option><option value="VIP">VIP · sem cobrança</option></select></div><div class="field"><label>Valor *</label><input id="payValue" type="number" step=".01" name="valor" required></div><div class="field"><label>Vencimento *</label><input type="date" name="venc" required></div><div class="field"><label>Forma</label><select name="forma"><option>Pix</option><option>Dinheiro</option><option>Débito</option><option>VIP</option></select></div><div class="field full"><label>Negociação / observação</label><textarea name="negociacao"></textarea></div><div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Lançar mensalidade</button></div></form>`);const sel=document.getElementById('payStudent'),val=document.getElementById('payValue');const fill=()=>{const s=db.students.find(x=>x.id==sel.value);const p=pacoteParaAluno(s||{});val.value=p.valor||0;document.querySelector('#payForm [name="venc"]').value=vencimentoPorMatricula(s?.dataMatricula||nowISO())};sel.onchange=fill;fill();document.getElementById('payForm').onsubmit=e=>{e.preventDefault();let o=Object.fromEntries(new FormData(e.currentTarget));o.id=uid();o.studentId=+o.studentId;o.valor=Number(o.valor);o.aluno=db.students.find(s=>s.id===o.studentId)?.nome||'';o.pago=false;o.parcial=false;o.negociacao=o.negociacao||'';o.forma=o.forma||'Pix';db.payments.push(o);log('Mensalidade lançada',o.aluno+' · '+money(o.valor));save();closeM();render()}}
-
+  const __saveAlunoOriginal=window.saveAluno;
   window.saveAluno=function(e,id){
-    const fd=new FormData(e.currentTarget),o=Object.fromEntries(fd.entries()),old=id?db.students.find(s=>s.id==id):null;
-    const preview=document.getElementById('studentPhotoPreview');o.foto=(preview&&preview.src&&preview.src.startsWith('data:'))?preview.src:(old?.foto||'');
-    ['objetivos','fisicas','respiratorias','autoimunes','psicologicas','modalidades','turmaIds'].forEach(k=>o[k]=collectChecks(fd,k));o.turmaIds=(o.turmaIds||[]).map(Number);o.modalidades=o.modalidades||[];o.modalidade=o.modalidades[0]||'';o.turmaId=o.turmaIds[0]||'';
-    if(!o.modalidades.length){alert('Selecione pelo menos uma modalidade.');return} if(!o.turmaIds.length){alert('Selecione pelo menos uma turma.');return}
-    const pac=pacoteParaAluno(o);o.pacote=pac.nome;o.mensalidade=pac.valor;o.dataMatricula=o.dataMatricula||nowISO();o.diaVenc=String(new Date(o.dataMatricula+'T12:00:00').getDate()<=10?10:(new Date(o.dataMatricula+'T12:00:00').getDate()<=15?15:30));o.vencimentoAtual=vencimentoPorMatricula(o.dataMatricula);o.id=id||uid();o.numeroMatricula=id?(old?.numeroMatricula||''):'MAT-'+String(db.students.length+1).padStart(4,'0');o.ativo=old?.ativo!==false;o.statusMatricula=o.ativo?'ativa':'inativa';o.saudeAtualizadaEm=old?.saudeAtualizadaEm||o.dataMatricula;o.observacoes=old?.observacoes||[];o.contratoAceito=old?.contratoAceito||false;o.contratoAceitoEm=old?.contratoAceitoEm||'';
-    if(id)Object.assign(old,o);else db.students.push(o);log(id?'Matrícula atualizada':'Nova matrícula',o.nome);save();closeM();render();visualizarContrato(o.id);
+    const fd=new FormData(e.currentTarget), old=id?db.students.find(s=>s.id==id):null;
+    __saveAlunoOriginal(e,id);
+    const s=id?db.students.find(x=>x.id==id):db.students[db.students.length-1]; if(!s)return;
+    s.status=fd.get("status")||s.status||"ativo";s.dataCancelamento=fd.get("dataCancelamento")||"";s.motivoCancelamento=fd.get("motivoCancelamento")||"";s.pacote=fd.get("pacote")||s.pacote||"";
+    if(s.status==="inativo"&&!s.dataCancelamento)s.dataCancelamento=nowISO();
+    if(s.status!=="inativo"){s.dataCancelamento="";s.motivoCancelamento=""}
+    timeline(s,id?"Matrícula atualizada":"Matrícula criada",s.status==="inativo"?"Matrícula inativada":"Matrícula ativa");save();render();
   };
 
-  window.salvarObsProf=function(id){const s=db.students.find(x=>x.id==id);if(!s)return;const box=document.getElementById('teacherObs');const nivel=document.getElementById('teacherObsNivel')?.value||'Compartilhada';const v=box?.value?.trim()||'';if(!v)return;s.observacoes=s.observacoes||[];s.observacoes.push({id:uid(),at:new Date().toISOString(),autora:session?.nome||'Professora',nivel,texto:v});s.obs=v;save();log('Observação registrada',s.nome);closeM();render()};
+  window.abrirAluno=function(id){
+    const s=db.students.find(x=>x.id==id);if(!s)return;
+    const turmaIds=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);const cs=turmaIds.map(x=>db.classes.find(c=>teacherIdMatches(c.id,x))).filter(Boolean);
+    if(session?.tipo==="teacher"&&!cs.some(teacherOwnsClass)){alert("Esta aluna não pertence a uma turma desta professora.");return}
+    const shared=(s.observacoes||[]).filter(o=>o.nivel!=="Privada"||o.autor===session?.nome||session?.tipo!=="teacher");
+    const timelineAll=[...(s.timeline||[]),...(db.history||[]).filter(h=>String(h.detail||"").includes(s.nome)).map(h=>({at:h.at,action:h.action,detail:h.detail,user:h.user}))].sort((a,b)=>new Date(a.at)-new Date(b.at));
+    const teacherPart=session?.tipo==="teacher"?`<div class="panel"><h2>Nova observação</h2><textarea id="teacherObs" placeholder="Registre uma observação para esta aluna."></textarea><div class="field" style="margin-top:8px"><select id="obsLevel"><option>Compartilhada</option><option>Privada</option></select></div><div class="actions"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`:`<div class="panel"><h2>Observações</h2>${shared.map(o=>`<div class="timeline-item"><strong>${esc(o.nivel)}</strong> · ${esc(o.texto)}<div class="small muted">${esc(o.autor||"")} · ${new Date(o.at).toLocaleString("pt-BR")}</div></div>`).join("")||'<p class="muted">Nenhuma observação registrada.</p>'}</div>`;
+    const adminButtons=session?.tipo!=="teacher"?`<button class="btn" onclick="novaMatricula(${s.id})">Editar matrícula</button>`:"";
+    openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Status:</strong> <span class="badge ${s.status==="ativo"?"ok":"neutral"}">${s.status==="ativo"?"Ativa":"Inativa"}</span> · <strong>Matrícula:</strong> ${dateBR(s.dataMatricula)}</p><p><strong>Contato:</strong> ${esc(s.fone||"—")} · <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Turmas:</strong><br>${cs.map(c=>esc(c.nome)+" · "+esc(c.modalidade)+" · "+esc(c.dia)+" "+esc(c.hora)).join("<br>")||"—"}</p><div class="actions">${adminButtons}<button class="btn" onclick="visualizarContrato(${s.id})">Contrato</button><button class="btn" onclick="openWhatsAppDirect({nome:${JSON.stringify(s.nome)},fone:${JSON.stringify(s.fone||s.respFone||"")},tipo:'Comunicado',whatsText:'Olá, ${String(s.nome||"").replace(/'/g,"\\'")}.'})">WhatsApp</button></div></div><div class="panel"><h2>Ficha de saúde</h2><p><strong>Última atualização:</strong> ${dateBR(s.healthUpdatedAt)||"Não registrada"} ${healthExpired(s)?'<span class="badge pending">Vencida</span>':'<span class="badge ok">Atualizada</span>'}</p><p><strong>Alergias:</strong> ${esc(s.alergias||"—")} · <strong>Cirurgias:</strong> ${esc(s.cirurgias||"—")}</p><p><strong>Restrições e limitações:</strong> ${esc(s.fisicas?.join(", ")||s.obs||"—")}</p><p><strong>Observações:</strong> ${esc(s.saudeObs||"—")}</p></div>${teacherPart}<div class="panel"><h2>Linha do tempo</h2><div class="timeline">${timelineAll.map(x=>`<div class="timeline-item"><strong>${esc(x.action||"Registro")}</strong> · ${esc(x.detail||"")}<div class="small muted">${x.at?new Date(x.at).toLocaleString("pt-BR"):""} · ${esc(x.user||"")}</div></div>`).join("")||'<p class="muted">Ainda não há movimentações.</p>'}</div></div>`);
+  };
 
-  window.abrirAluno=function(id){const s=db.students.find(x=>x.id==id);if(!s)return;const turmaIds=s.turmaIds||[];const cs=turmaIds.map(t=>db.classes.find(c=>c.id==t)).filter(Boolean);if(session?.tipo==='teacher'&&!cs.some(c=>teacherOwnsClass(c))){alert('Esta aluna não pertence a uma turma desta professora.');return}const obs=(s.observacoes||[]).filter(o=>session?.tipo!=='teacher'||o.nivel==='Compartilhada'||o.autora===session?.nome);openM('Ficha da aluna',`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||'—')} · <strong>Turmas:</strong> ${esc(cs.map(c=>c.nome).join(', ')||'—')}</p><p><strong>Modalidades:</strong> ${esc((s.modalidades||[]).join(', ')||'—')} · <strong>Pacote:</strong> ${esc(s.pacote||'—')}</p></div><div class="panel"><h2>Ficha de saúde</h2><p><strong>Última atualização:</strong> ${dateBR(s.saudeAtualizadaEm||'—')}</p><p><strong>Alergias:</strong> ${esc(s.alergias||'—')} · <strong>Cirurgias:</strong> ${esc(s.cirurgias||'—')} · <strong>Fobias:</strong> ${esc(s.fobias||'—')}</p><p><strong>Restrições/limitações:</strong> ${esc((s.fisicas||[]).join(', ')||'—')}</p></div><div class="panel"><h2>Observações</h2>${obs.map(o=>`<p><span class="badge neutral">${esc(o.nivel)}</span> · ${dateBR(o.at.slice(0,10))} · <strong>${esc(o.autora)}</strong><br>${esc(o.texto)}</p>`).join('')||'<p class="muted">Nenhuma observação registrada.</p>'}${session?`<textarea id="teacherObs" style="min-height:100px" placeholder="Nova observação"></textarea><select id="teacherObsNivel"><option>Compartilhada</option><option>Privada</option><option>Administrativa</option></select><div class="actions" style="margin-top:10px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div>`:''}</div>`)};
+  window.salvarObsProf=function(id){
+    const s=db.students.find(x=>x.id==id);if(!s)return;const text=document.getElementById("teacherObs")?.value.trim();if(!text)return alert("Escreva a observação antes de salvar.");const nivel=document.getElementById("obsLevel")?.value||"Compartilhada";if(!Array.isArray(s.observacoes))s.observacoes=[];s.observacoes.push({id:uid(),at:new Date().toISOString(),autor:session?.nome||"",nivel,texto:text});timeline(s,"Observação registrada",nivel+": "+text);log("Observação da aluna registrada",s.nome+" · "+nivel);save();closeM();render();
+  };
 
-  // Menu de contratos fica disponível somente para administradoras.
-  const oldApply=window.applyAccess;
-  window.applyAccess=function(){const teacher=session?.tipo==='teacher';const allowed=teacher?['alunos','turmas','presenca','busca']:['painel','alunos','professores','turmas','presenca','mensalidades','contas','financeiro','contratos','eventos','aniversarios','busca','historico','config'];document.querySelectorAll('.nav button[data-view]').forEach(b=>{b.style.display=allowed.includes(b.dataset.view)?'':'none'});if(!allowed.includes(view))view=teacher?'alunos':'painel'};
-  const oldGo=window.go; window.go=function(v){const teacher=session?.tipo==='teacher';const allowed=teacher?['alunos','turmas','presenca','busca']:['painel','alunos','professores','turmas','presenca','mensalidades','contas','financeiro','contratos','eventos','aniversarios','busca','historico','config'];if(!allowed.includes(v))return;view=v;render()};
+  window.novoProfessor=function(id){
+    __novoProfessorOriginal(id);const form=document.getElementById("profForm");if(!form)return;const t=db.teachers.find(x=>x.id==id)||{};const first=form.querySelector(".field.full");if(first&&!document.getElementById("teacherBirth"))first.insertAdjacentHTML("afterend",`<div class="field"><label>Data de nascimento</label><input id="teacherBirth" type="date" name="dataNascimento" value="${esc(t.dataNascimento||"")}"></div><div class="field full"><label>Modalidades que leciona</label><div class="modalidades-grid">${["Ballet","Dança do Ventre","Jazz","Infantil","Outras"].map(m=>`<label class="modalidade-check"><input type="checkbox" name="modalidadesProf" value="${esc(m)}" ${(t.modalidades||[]).includes(m)?"checked":""}> ${esc(m)}</label>`).join("")}</div></div>`);form.onsubmit=e=>{e.preventDefault();const fd=new FormData(form),o=Object.fromEntries(fd.entries()),old=id?db.teachers.find(x=>x.id==id):null;o.id=id||uid();o.dataNascimento=fd.get("dataNascimento")||"";o.modalidades=fd.getAll("modalidadesProf");o.status=fd.get("acessoAtivo")==="false"?"inativo":"ativo";o.acessoAtivo=o.status!=="inativo";o.foto=document.getElementById("teacherPhotoPreview")?.src?.startsWith("data:")?document.getElementById("teacherPhotoPreview").src:(old?.foto||"");if(id)Object.assign(old,o);else db.teachers.push(o);log(id?"Professor atualizado":"Professor cadastrado",o.nome);save();closeM();render()};
+  };
+
+  window.novaTurma=function(id){
+    __novaTurmaOriginal(id);const form=document.getElementById("classForm");if(!form)return;const c=db.classes.find(x=>x.id==id)||{};const last=form.querySelector(".actions");last.insertAdjacentHTML("beforebegin",`<div class="field"><label>Limite de alunos</label><input type="number" min="0" name="limite" value="${Number(c.limite||0)}"></div><div class="field"><label>Status</label><select name="status"><option value="ativo" ${c.status!=="inativo"?"selected":""}>Ativa</option><option value="inativo" ${c.status==="inativo"?"selected":""}>Inativa</option></select></div><div class="field full"><label>Observação da turma</label><textarea name="obs">${esc(c.obs||"")}</textarea></div>`);form.onsubmit=e=>{e.preventDefault();const fd=new FormData(form),o=Object.fromEntries(fd.entries()),old=id?db.classes.find(x=>x.id==id):null;o.id=id||uid();o.limite=Number(fd.get("limite")||0);o.status=fd.get("status")||"ativo";o.obs=fd.get("obs")||"";o.historico=old?.historico||[];if(!id)o.historico.push({at:new Date().toISOString(),acao:"criada"});if(id&&old&&(old.hora!==o.hora||old.dia!==o.dia)){o.historico.push({at:new Date().toISOString(),acao:"horário alterado",anterior:old.dia+" "+old.hora});}if(id&&old&&old.profId!==o.profId){o.historico.push({at:new Date().toISOString(),acao:"professora alterada",anterior:old.profId});}const collision=db.classes.find(x=>x.id!==o.id&&x.status!=="inativo"&&o.status!=="inativo"&&x.dia===o.dia&&x.hora===o.hora);if(collision){alert("Já existe uma turma neste dia e horário. Há uma única sala disponível.");return}if(id)Object.assign(old,o);else db.classes.push(o);log(id?"Turma atualizada":"Turma cadastrada",o.nome);save();closeM();render()};
+  };
+
+  window.novaPresenca=function(){
+    __novaPresencaOriginal();const form=document.getElementById("attForm");if(!form)return;const oldStatus=form.querySelectorAll('select[name^="status_"]');oldStatus.forEach(s=>{s.innerHTML='<option value="Presente">Presente</option><option value="Ausente">Ausente</option>'});const obs=form.querySelector('textarea[name="obs"]');if(obs){obs.insertAdjacentHTML("afterend",`<div class="field" style="margin-top:12px"><label>Aula cancelada?</label><select name="cancelada"><option value="nao">Não</option><option value="sim">Sim</option></select></div><div class="field"><label>Motivo do cancelamento</label><input name="motivoCancelamentoAula"></div>`)}
+    form.onsubmit=e=>{e.preventDefault();const fd=new FormData(form),tid=Number(fd.get("turmaId")),cancelada=fd.get("cancelada")==="sim";if(!cancelada){const st=db.students.filter(s=>(Array.isArray(s.turmaIds)?s.turmaIds.map(Number):[Number(s.turmaId)]).includes(tid)&&s.status!=="inativo");const statuses=st.map(s=>fd.get("status_"+s.id)||"Ausente");const o={id:uid(),data:fd.get("data"),turmaId:tid,profId:db.classes.find(c=>c.id==tid)?.profId||"",status:statuses,pres:statuses.map(x=>x==="Presente"),studentIds:st.map(s=>s.id),obs:fd.get("obs"),cancelada:false};db.attendance.push(o);log("Lista de presença registrada",db.classes.find(c=>c.id==tid)?.nome||"")}else{db.attendance.push({id:uid(),data:fd.get("data"),turmaId:tid,cancelada:true,motivoCancelamento:fd.get("motivoCancelamentoAula")||"",studentIds:[],status:[],pres:[]});log("Aula cancelada",db.classes.find(c=>c.id==tid)?.nome||"")}save();closeM();render()};
+  };
+
+  window.novaMensalidade=function(){
+    __novaMensalidadeOriginal();const form=document.getElementById("payForm");if(!form)return;const value=form.querySelector('[name="valor"]');const venc=form.querySelector('[name="venc"]');const st=form.querySelector('[name="studentId"]');const wrap=st?.closest(".field");if(wrap&&!document.getElementById("payPackage"))wrap.insertAdjacentHTML("afterend",`<div class="field"><label>Pacote</label><select id="payPackage" name="pacote"><option value="">Selecionar</option>${Object.entries(PACKAGES).map(([k,p])=>`<option value="${k}">${p.nome} · ${money(p.valor)}</option>`).join("")}</select></div>`);const pkg=document.getElementById("payPackage");if(pkg&&value)pkg.onchange=()=>{if(PACKAGES[pkg.value])value.value=PACKAGES[pkg.value].valor};
+    const originalStudentChange=st?.onchange; if(st)st.onchange=(e)=>{if(originalStudentChange)originalStudentChange(e);const s=db.students.find(x=>x.id==e.target.value);if(pkg&&s?.pacote)pkg.value=s.pacote};
+    if(venc){const setDue=()=>{const s=db.students.find(x=>x.id==st?.value);if(!s?.dataMatricula)return;venc.value=calculateDueDate(s.dataMatricula)};setDue()}
+  };
+  function calculateDueDate(enrollment){const d=new Date(enrollment+"T12:00:00"),day=d.getDate(),y=d.getFullYear(),m=d.getMonth();let target=day<=10?10:day<=15?15:Math.min(30,new Date(y,m+1,0).getDate());let due=new Date(y,m,target);while([0,6].includes(due.getDay()))due.setDate(due.getDate()+1);return due.toISOString().slice(0,10)}
+  window.calculateDueDate=calculateDueDate;
+
+  window.receber=window.receber||function(){};
+
+  window.novoEvento=function(id){
+    __novoEventoOriginal(id);const form=document.getElementById("eventForm");if(!form)return;const last=form.querySelector(".actions");const e=db.events.find(x=>x.id==id)||{};last.insertAdjacentHTML("beforebegin",`<div class="field"><label>Horário</label><input type="time" name="horario" value="${esc(e.horario||"")}"></div><div class="field"><label>Turma vinculada</label><select name="turmaId"><option value="">Selecione</option>${db.classes.filter(c=>c.status!=="inativo").map(c=>`<option value="${c.id}" ${String(e.turmaId)===String(c.id)?"selected":""}>${esc(c.nome)}</option>`).join("")}</select></div><div class="field full"><label>Observação</label><textarea name="observacao">${esc(e.observacao||e.obs||"")}</textarea></div>`);form.onsubmit=x=>{x.preventDefault();const fd=new FormData(form),o=Object.fromEntries(fd.entries()),old=id?db.events.find(x=>x.id==id):null;o.id=id||uid();o.horario=fd.get("horario")||"";o.turmaId=fd.get("turmaId")||"";o.observacao=fd.get("observacao")||"";if(id)Object.assign(old,o);else db.events.push(o);log(id?"Evento atualizado":"Evento cadastrado",o.nome);save();closeM();render()};
+  };
+
+  // Lista de espera e lotação na visão de turmas.
+  const __turmasOriginal=V.turmas;
+  V.turmas=function(){
+    const cs=visibleClasses().slice().filter(c=>c.status!=="inativo");
+    return head("Turmas","Controle de horários, professoras, capacidade e histórico.",session?.tipo==="teacher"?"":`<button class="btn primary" onclick="novaTurma()">＋ Nova turma</button>`)+`<div class="panel"><table><tr><th>Turma</th><th>Modalidade</th><th>Dia</th><th>Horário</th><th>Professora</th><th>Ocupação</th><th>Status</th><th></th></tr>${cs.map(c=>{const n=activeStudentsForClass(c).length;const lot=c.limite&&n>=c.limite;return `<tr><td><strong>${esc(c.nome)}</strong></td><td>${esc(c.modalidade)}</td><td>${esc(c.dia)}</td><td>${esc(c.hora)}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,c.profId))?.nome||"—")}</td><td>${c.limite?n+"/"+c.limite:"Sem limite"}${c.listaEspera?.length?` · ${c.listaEspera.length} espera`:""}</td><td><span class="badge ${lot?"pending":"ok"}">${lot?"Lotada":"Disponível"}</span></td><td>${session?.tipo==="teacher"?"":`<button class="btn" onclick="novaTurma(${c.id})">Abrir</button>`}</td></tr>`}).join("")||tableEmpty(8)}</table></div>`;
+  };
+
+  // Presença: somente Presente/Ausente e cancelamento.
+  const __presOriginal=V.presenca;
+  V.presenca=function(){const ats=session?.tipo==="teacher"?db.attendance.filter(a=>visibleClasses().some(c=>teacherIdMatches(c.id,a.turmaId))):db.attendance;return head("Lista de presença","Presença por aula/data, com histórico de correções e cancelamentos.",`<button class="btn primary" onclick="novaPresenca()">＋ Registrar presença</button>`)+`<div class="panel"><table><tr><th>Data</th><th>Turma</th><th>Professora</th><th>Status</th><th>Presentes</th><th>Faltas</th><th></th></tr>${ats.slice().sort((a,b)=>b.data.localeCompare(a.data)).map(a=>{const pres=Array.isArray(a.pres)?a.pres:[];return `<tr><td>${dateBR(a.data)}</td><td>${esc(db.classes.find(c=>teacherIdMatches(c.id,a.turmaId))?.nome||"—")}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,a.profId))?.nome||"—")}</td><td>${a.cancelada?'<span class="badge neutral">Cancelada</span>':'<span class="badge ok">Realizada</span>'}</td><td>${a.cancelada?"—":pres.filter(Boolean).length}</td><td>${a.cancelada?"—":pres.length-pres.filter(Boolean).length}</td><td><button class="btn" onclick="abrirPresenca(${a.id})">Abrir</button></td></tr>`}).join("")||tableEmpty(7)}</table></div>`};
+
+  // Linha do tempo geral da aluna e comunicação ficam disponíveis sem criar nova área obrigatória.
+  const __historicoOriginal=V.historico;
+  V.historico=function(){return head("Histórico","Registro das alterações realizadas no sistema e das comunicações.")+`<div class="panel"><h2>Comunicação</h2><div class="timeline">${db.communication.slice().reverse().map(h=>`<div class="timeline-item"><strong>${esc(h.tipo||"Comunicado")}</strong> · ${esc(h.contato||"")} · ${esc(h.situacao||"")}<div>${esc(h.conteudo||"")}</div><div class="small muted">${new Date(h.at).toLocaleString("pt-BR")} · ${esc(h.canal||"")} · ${esc(h.user||"")}</div></div>`).join("")||'<p class="muted">Nenhuma comunicação registrada.</p>'}</div></div><div class="panel"><h2>Histórico do sistema</h2><div class="timeline">${db.history.slice().reverse().map(h=>`<div class="timeline-item"><strong>${esc(h.action)}</strong> · ${esc(h.detail)}<div class="small muted">${new Date(h.at).toLocaleString("pt-BR")} · ${esc(h.user)}</div></div>`).join("")||'<p class="muted">Ainda não há movimentações.</p>'}</div></div>`};
+
+  // Busca geral já retorna turmas e status da aluna.
+  V.busca=function(){return head("Busca","Pesquise pelo nome da aluna e veja turmas, modalidades e status em um único resultado.")+`<div class="panel"><input id="globalSearch" class="search" placeholder="Digite o nome da aluna, telefone ou turma"><div id="searchResults" style="margin-top:16px"></div></div>`};
+
+  const __renderOriginal=window.render;
+  window.render=function(){migrate();__renderOriginal();if(view==="alunos")drawStudentTable()};
+
+  // Mantém a interface existente, mas identifica a versão consolidada.
+  document.documentElement.dataset.fenixSpec=SPEC_VERSION;
+  setTimeout(()=>{try{migrate();if(session){applyAccess();render()}}catch(e){console.error(e)}},0);
 })();
 
 </script>
