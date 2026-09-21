@@ -238,8 +238,8 @@ const SUPABASE_CONFIG = Object.freeze({
   anonKey: "sb_publishable_pIOav1hpWCFzxXmAIotXQ",
   appsScriptUrl: "https://script.google.com/macros/s/AKfycbz1J6OAatsXeG4sLXF7G1ebpmj1i5BUVxQ1iuSpGyTEUHza6ZqrYojvvt8TXREJbQ3j/exec",
   adminEmails: {
-    nahid: "COLE_O_EMAIL_DA_NAHID_AQUI",
-    tati: "COLE_O_EMAIL_DA_TATI_AQUI"
+    nahid: "phoenixnahid@gmail.com",
+    tati: "tatiane.neri@yahoo.com.br"
   }
 });
 
@@ -338,11 +338,20 @@ async function loadSupabaseDb(){
     const id=localForRemote("professoras",t.id); profs[t.id]=id;
   });
 
-  db.teachers=professoras.map(t=>({
-    id:profs[t.id], nome:t.nome, apelido:"", cpf:"", fone:t.telefone||"", email:"",
-    obs:"", login:(t.nome||"").toLowerCase().replace(/[^a-z0-9]+/g,""), senha:"",
-    acessoAtivo:t.status==="ativo", foto:t.foto_url||""
-  }));
+  const teacherAccessEmails = {
+    "alê": "alexazeroc@gmail.com",
+    "ale": "alexazeroc@gmail.com",
+    "rawnie": "glauciamaria12@yahoo.com.br"
+  };
+  db.teachers=professoras.map(t=>{
+    const key=String(t.nome||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const accessEmail=teacherAccessEmails[key]||"";
+    return {
+      id:profs[t.id], nome:t.nome, apelido:"", cpf:"", fone:t.telefone||"", email:accessEmail,
+      obs:"", login:accessEmail||((t.nome||"").toLowerCase().replace(/[^a-z0-9]+/g,"")), senha:"",
+      acessoAtivo:t.status==="ativo", foto:t.foto_url||""
+    };
+  });
 
   const turmaMap={};
   db.classes=turmas.map(t=>{
