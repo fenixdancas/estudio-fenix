@@ -501,7 +501,7 @@ function removeDuplicateTeachers(){
     db.classes.filter(c=>teacherIdMatches(c.profId,teacher.id)).length*2;
   const keepByName=new Map(), replacedIds=new Map();
   db.teachers.forEach(teacher=>{
-    const key=normalizeName(teacher.nome||teacher.apelido);
+    const key=normalizeName(teacher.apelido||teacher.nome);
     if(!key){keepByName.set("id:"+teacher.id,teacher);return;}
     const current=keepByName.get(key);
     if(!current){keepByName.set(key,teacher);return;}
@@ -523,7 +523,7 @@ function uniqueTeachers(){
     db.classes.filter(c=>teacherIdMatches(c.profId,teacher.id)).length*2;
   const unique=new Map();
   db.teachers.forEach(teacher=>{
-    const key=normalizeName(teacher.nome||teacher.apelido)||"id:"+teacher.id;
+    const key=normalizeName(teacher.apelido||teacher.nome)||"id:"+teacher.id;
     const current=unique.get(key);
     if(!current||score(teacher)>score(current))unique.set(key,teacher);
   });
