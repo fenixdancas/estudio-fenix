@@ -495,6 +495,28 @@ function allLoginUsers(){
   });
 }
 
+function removeDuplicateTeachers(){
+  const normalizeName=value=>String(value||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const score=teacher=>[teacher.foto,teacher.fone,teacher.email,teacher.cpf,teacher.apelido,teacher.obs].filter(Boolean).length+
+    db.classes.filter(c=>teacherIdMatches(c.profId,teacher.id)).length*2;
+  const keepByName=new Map(), replacedIds=new Map();
+  db.teachers.forEach(teacher=>{
+    const key=normalizeName(teacher.nome||teacher.apelido);
+    if(!key){keepByName.set("id:"+teacher.id,teacher);return;}
+    const current=keepByName.get(key);
+    if(!current){keepByName.set(key,teacher);return;}
+    if(score(teacher)>score(current)){
+      replacedIds.set(String(current.id),teacher.id);
+      keepByName.set(key,teacher);
+    }else{
+      replacedIds.set(String(teacher.id),current.id);
+    }
+  });
+  db.classes.forEach(c=>{const replacement=replacedIds.get(String(c.profId));if(replacement!=null)c.profId=replacement;});
+  db.teachers=[...keepByName.values()];
+  saveLocalOnly();
+}
+
 async function renderLogin(){
   const users=allLoginUsers();
   const user=document.getElementById("loginUser"), pass=document.getElementById("loginPass"), enter=document.getElementById("loginEnter");
@@ -545,6 +567,7 @@ async function renderLogin(){
     }catch(err){
       console.error("Não foi possível carregar a base remota; abrindo com os dados locais.",err);
     }
+    removeDuplicateTeachers();
     if(remember.checked)localStorage.setItem("fenix_remember_me",JSON.stringify({user:u.id}));else localStorage.removeItem("fenix_remember_me");
     sessionStorage.setItem("fenix_session",data.user.id);
     start();
