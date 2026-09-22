@@ -586,6 +586,27 @@ async function startFenix(){
 }
 
 document.getElementById("loginArt").src=LOGIN_ART; document.getElementById("sideLogo").src=LOGO; document.getElementById("sideFe").src=FE;
+
+async function hydrateFenixArt(){
+  const loginArt=document.getElementById("loginArt"), sideLogo=document.getElementById("sideLogo"), sideFe=document.getElementById("sideFe");
+  const broken=()=>!loginArt.complete || !loginArt.naturalWidth || !sideLogo.complete || !sideLogo.naturalWidth || !sideFe.complete || !sideFe.naturalWidth;
+  await new Promise(r=>setTimeout(r,80));
+  if(!broken()) return;
+  try{
+    const legacy=await fetch("./index_FENIX_COMPARTILHADO.html",{cache:"force-cache"}).then(r=>{if(!r.ok) throw new Error("legacy"); return r.text();});
+    const pick=(name)=>{
+      const re=new RegExp("(?:const|let|var)\\s+"+name+"\\s*=\\s*([\"'])(data:image/[^;]+;base64,[A-Za-z0-9+/=]+)\\1");
+      const m=legacy.match(re); return m?m[2]:null;
+    };
+    let art=pick("LOGIN_ART"), logo=pick("LOGO"), fe=pick("FE");
+    if(!art || !logo || !fe){
+      const unique=[...new Set([...legacy.matchAll(new RegExp("data:image/[^;]+;base64,[A-Za-z0-9+/=]+","g"))].map(m=>m[0]))];
+      if(!art) art=unique[0]; if(!logo) logo=unique[1]; if(!fe) fe=unique[2];
+    }
+    if(art) loginArt.src=art; if(logo) sideLogo.src=logo; if(fe) sideFe.src=fe;
+  }catch(e){console.error("Falha ao carregar a arte do Fênix",e);}
+}
+hydrateFenixArt();
 startFenix();
 
 async function start(){
