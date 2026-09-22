@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Autorização da Meta</title></head>
+<body>
+<p>Finalizando a conexão com o WhatsApp…</p>
+<script>
+(function(){
+  const p=new URLSearchParams(location.search);
+  if(window.opener){
+    window.opener.postMessage({
+      type:"FENIX_META_OAUTH",
+      code:p.get("code"),
+      state:p.get("state"),
+      error:p.get("error")||p.get("error_description")
+    },location.origin);
+  }
+  setTimeout(function(){window.close()},300);
+})();
+</script>
+</body>
+</html>
