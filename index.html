@@ -183,42 +183,62 @@ function metaStatus(text,ok=false){
   if(el){el.textContent=text;el.className=ok?"badge ok":"small muted";}
 }
 
-function launchMetaCoexistencia(){
-  metaStatus("Abrindo a conexão com a Meta...");
-  const launch=()=>{
-    FB.login(async function(response){
-      const code=response?.authResponse?.code;
-      if(!code){
-        metaStatus("A conexão não foi concluída.");
-        return;
-      }
-      try{
-        const result=await callFenixAppsScript("meta_coexistence_complete",{code});
-        if(!result?.ok) throw new Error(result?.error||"Não foi possível concluir a conexão.");
-        metaStatus("WhatsApp conectado à Coexistência.",true);
-        alert("WhatsApp conectado com sucesso.\n\nNúmero: "+(result.display_phone_number||"não informado")+"\nWABA: "+(result.waba_id||"não informado"));
-      }catch(err){
-        metaStatus("Não foi possível concluir a conexão.");
-        alert(err.message||"Não foi possível concluir a conexão.");
-      }
-    },{
-      config_id:META_CONFIG.configId,
-      response_type:"code",
-      override_default_response_type:true,
-      extras:{
-        setup:{},
-        featureType:"whatsapp_business_app_onboarding",
-        version:"v4"
-      }
-    });
-  };
-  if(metaSdkReady) launch();
-  else {
-    const started=typeof FB!=="undefined";
-    if(started){FB.init({appId:META_CONFIG.appId,cookie:true,xfbml:false,version:"v25.0",fedCM:false});metaSdkReady=true;launch();}
-    else {metaStatus("A conexão da Meta ainda está carregando. Tente novamente em alguns segundos.");}
+let metaAuthPopup=null;
+
+async function concluirMetaCoexistencia(code){
+  try{
+    const result=await callFenixAppsScript("meta_coexistence_complete",{code});
+    if(!result?.ok) throw new Error(result?.error||"Não foi possível concluir a conexão.");
+    metaStatus("WhatsApp conectado à Coexistência.",true);
+    alert("WhatsApp conectado com sucesso.\n\nNúmero: "+(result.display_phone_number||"não informado")+"\nWABA: "+(result.waba_id||"não informado"));
+  }catch(err){
+    metaStatus("Não foi possível concluir a conexão.");
+    alert(err.message||"Não foi possível concluir a conexão.");
   }
 }
+
+function launchMetaCoexistencia(){
+  const state=crypto.randomUUID();
+  sessionStorage.setItem("metaOAuthState",state);
+  const redirectUri=new URL("meta-callback.html",location.href).href;
+  const params=new URLSearchParams({
+    client_id:META_CONFIG.appId,
+    config_id:META_CONFIG.configId,
+    redirect_uri:redirectUri,
+    response_type:"code",
+    override_default_response_type:"true",
+    state,
+    display:"popup",
+    extras:JSON.stringify({
+      setup:{},
+      featureType:"whatsapp_business_app_onboarding",
+      version:"v4"
+    })
+  });
+  metaAuthPopup=window.open("https://www.facebook.com/v25.0/dialog/oauth?"+params.toString(),"metaCoexistencia","width=620,height=760,resizable=yes,scrollbars=yes");
+  if(!metaAuthPopup){
+    metaStatus("O navegador bloqueou a janela da Meta.");
+    alert("Permita pop-ups para o Sistema Fênix e tente novamente.");
+    return;
+  }
+  metaStatus("Conclua a autorização na janela da Meta.");
+}
+
+window.addEventListener("message",function(event){
+  if(event.origin!==location.origin || event.data?.type!=="FENIX_META_OAUTH") return;
+  const expected=sessionStorage.getItem("metaOAuthState");
+  sessionStorage.removeItem("metaOAuthState");
+  if(event.data.state!==expected){
+    metaStatus("A autorização recebida não pôde ser validada.");
+    return;
+  }
+  if(event.data.error || !event.data.code){
+    metaStatus("A conexão não foi concluída.");
+    return;
+  }
+  metaStatus("Meta autorizada. Finalizando conexão...");
+  concluirMetaCoexistencia(event.data.code);
+});
 
 window.addEventListener("message",function(event){
   if(event.origin!=="https://www.facebook.com") return;
