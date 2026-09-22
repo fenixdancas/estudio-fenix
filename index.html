@@ -73,14 +73,14 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 
 /* NOVA INTERFACE DE LOGIN: posições relativas à própria arte 1536x1024 */
 .login{min-height:100vh;width:100vw;padding:0;display:grid;place-items:center;background:#eee4ef;overflow:hidden}
-.login-scene{position:relative;width:min(100vw,150vh);height:min(100vh,66.6666667vw);aspect-ratio:3/2;display:block;overflow:hidden;flex:none}
+.login-scene{position:relative;width:100vw;height:100vh;display:block;overflow:hidden;flex:none}
 .login-art{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;object-position:center;user-select:none;display:block}
 .login-interactive{position:absolute;inset:0;width:100%;height:100%;z-index:50;pointer-events:none}
 .login-interactive > *{pointer-events:auto}
 .login-hit-user,.login-hit-pass,.login-hit-enter,.login-hit-eye,.login-hit-remember,.login-hit-forgot,.login-hit-remember-label,.login-user-value,.login-remember-mark{position:absolute;box-sizing:border-box;font-family:Arial,sans-serif}
-.login-hit-user{left:53.91%;top:49.51%;width:31.05%;height:5.08%;padding:0;border:0;outline:0;background:transparent;color:transparent;opacity:0;appearance:none;-webkit-appearance:none;cursor:pointer;z-index:102}
+.login-hit-user{left:53.91%;top:49.51%;width:31.05%;height:5.08%;padding:0;border:0;outline:0;background:transparent;color:transparent;opacity:0;appearance:none;-webkit-appearance:none;pointer-events:none;z-index:102}
 .login-hit-user option{color:#33253a;background:#fff}
-.login-user-value{display:block;left:58.25%;top:50.15%;width:20%;height:4%;font-size:19px;line-height:1;color:#33253a;z-index:103;pointer-events:none}.login-user-value.show{display:block}.login-user-menu{position:absolute;left:53.91%;top:54.65%;width:31.05%;background:#fff;border:1px solid #cfc4d8;border-radius:0 0 10px 10px;box-shadow:0 10px 24px rgba(77,22,79,.18);z-index:300;display:none;overflow:hidden;font:16px Arial,sans-serif}.login-user-menu.open{display:block}.login-user-option{padding:12px 18px;color:#33253a;background:#fff;cursor:pointer}.login-user-option:hover,.login-user-option.active{background:#f1e6f3;color:#54227d;font-weight:600}
+.login-user-value{display:block;left:58.25%;top:50.15%;width:20%;height:4%;font-size:19px;line-height:1;color:#33253a;z-index:103;pointer-events:auto;cursor:pointer}.login-user-value.show{display:block}.login-user-menu{position:absolute;left:53.91%;top:54.65%;width:31.05%;background:#fff;border:1px solid #cfc4d8;border-radius:0 0 10px 10px;box-shadow:0 10px 24px rgba(77,22,79,.18);z-index:300;display:none;overflow:hidden;font:16px Arial,sans-serif}.login-user-menu.open{display:block}.login-user-option{padding:12px 18px;color:#33253a;background:#fff;cursor:pointer}.login-user-option:hover,.login-user-option.active{background:#f1e6f3;color:#54227d;font-weight:600}
 .login-hit-pass{left:53.91%;top:58.58%;width:31.05%;height:5.08%;padding:0 8.5% 0 6.8%;border:0;outline:0;background:transparent;color:#33253a;font-size:19px;line-height:1;z-index:102}
 .login-hit-pass::placeholder{color:transparent}
 .login-hit-eye{left:82.03%;top:59.0%;width:2.45%;height:3.8%;padding:0;border:0;background:transparent;cursor:pointer;z-index:104}
@@ -92,8 +92,6 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 .login-hit-forgot{left:74.25%;top:72.08%;width:12%;height:3.4%;padding:0;border:0;background:transparent;color:transparent;cursor:pointer;z-index:106}
 .login-field-cover{position:absolute;box-sizing:border-box;background:rgba(255,255,255,.94);border-radius:8px;pointer-events:none;z-index:101}.user-cover{left:57.55%;top:49.7%;width:24.1%;height:4.65%}.pass-cover{left:57.55%;top:58.75%;width:24.0%;height:4.65%}.login-pass-placeholder{position:absolute;left:58.25%;top:59.15%;width:19%;height:3.6%;font:19px/1 Arial,sans-serif;color:#8f8aa3;pointer-events:none;z-index:103}.login-hit-pass:not(:placeholder-shown) + .login-field-cover + .login-pass-placeholder{display:none}.login-hit-user:focus,.login-hit-pass:focus{outline:none}
 .login-setup{z-index:200}
-@media(max-aspect-ratio:3/2){.login-scene{width:100vw;height:66.6666667vw}}
-@media(min-aspect-ratio:3/2){.login-scene{width:150vh;height:100vh}}
 
 /* estabilidade visual dos controles sobre a arte */
 .login-hit-user,.login-hit-pass,.login-hit-enter,.login-hit-eye,.login-hit-remember,.login-hit-remember-label,.login-hit-forgot{outline:none!important;box-shadow:none!important;-webkit-tap-highlight-color:transparent}
@@ -488,7 +486,13 @@ function allLoginUsers(){
     {id:"tati",nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}
   ];
   db.teachers.forEach(t=>{if(t.email)a.push({id:"prof:"+t.id,nome:t.nome,tipo:"teacher",email:t.email,teacherId:t.id,ativo:t.acessoAtivo!==false})});
-  return a;
+  const seen=new Set();
+  return a.filter(u=>{
+    const key=String(u.email||u.nome||u.id).trim().toLowerCase();
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function renderLogin(){
@@ -501,7 +505,6 @@ async function renderLogin(){
   pass.value="";
   const updateUser=()=>{const selected=users.find(u=>u.id===user.value);if(userValue)userValue.textContent=selected?.nome||"";};
   if(menu){menu.innerHTML=users.map(u=>`<div class="login-user-option" role="option" data-id="${esc(u.id)}">${esc(u.nome)}</div>`).join("");menu.querySelectorAll(".login-user-option").forEach(o=>o.onclick=()=>{user.value=o.dataset.id;updateUser();menu.classList.remove("open")});}
-  user.onclick=e=>{e.preventDefault();if(menu)menu.classList.toggle("open")};
   document.getElementById("loginUserValue").onclick=()=>{if(menu)menu.classList.toggle("open")};
   remember.onchange=()=>mark&&mark.classList.toggle("on",!!remember.checked);
   updateUser(); remember.checked=!!remembered; if(mark)mark.classList.toggle("on",!!remember.checked);
@@ -537,7 +540,11 @@ async function renderLogin(){
     }
     supabaseClient=authClient;
     supabaseReady=true;
-    await loadSupabaseDb();
+    try{
+      await loadSupabaseDb();
+    }catch(err){
+      console.error("Não foi possível carregar a base remota; abrindo com os dados locais.",err);
+    }
     if(remember.checked)localStorage.setItem("fenix_remember_me",JSON.stringify({user:u.id}));else localStorage.removeItem("fenix_remember_me");
     sessionStorage.setItem("fenix_session",data.user.id);
     start();
