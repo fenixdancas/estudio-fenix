@@ -165,9 +165,9 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const LOGIN_ART = "./logo-fenix.png";
-const LOGO = "./logo-fenix-marca.png";
-const FE = "./fenix-elemento.png";
+const LOGIN_ART = "logo-fenix.png";
+const LOGO = "logo-fenix-marca.png";
+const FE = "fenix-elemento.png";
 const META_CONFIG = Object.freeze({
   appId: "1519791146860663",
   configId: "2281774802614136"
@@ -242,6 +242,13 @@ const SUPABASE_CONFIG = Object.freeze({
     tati: "tatiane.neri@yahoo.com.br"
   }
 });
+
+// Compatibilidade de autenticação com a base anterior do Fênix.
+const LEGACY_SUPABASE_CONFIG = Object.freeze({
+  url: "https://dizswbyazluewpfmfvoj.supabase.co",
+  anonKey: "sb_publishable_DcdkG-7eGCufPDpP6HVbYw_rtje_Oxs"
+});
+let authProject = "current";
 
 const DEFAULT = {
  users:{nahid:{nome:"Nahid",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.nahid},tati:{nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}},
@@ -503,19 +510,77 @@ async function renderLogin(){
     const u=users.find(x=>x.id===user.value), password=pass.value;
     if(!u||!u.email){alert("Este acesso ainda não possui e-mail de autenticação configurado.");return;}
     if(u.tipo==="teacher"&&u.ativo===false){alert("Este acesso está desativado.");return;}
-    const {data,error}=await supabaseClient.auth.signInWithPassword({email:u.email,password});
-    if(error){alert("Usuário ou senha incorretos.");return;}
-    const {data:profile,error:profileError}=await supabaseClient.from("perfis").select("id,nome,papel,status,professora_id").eq("id",data.user.id).single();
-    if(profileError||!profile||profile.status!=="ativo"){await supabaseClient.auth.signOut();alert("Este acesso está desativado ou não foi configurado no Supabase.");return;}
-    await loadSupabaseDb();
-    session={id:profile.id,nome:profile.nome,tipo:profile.papel==="admin"?"admin":"teacher",teacherId:profile.professora_id,email:data.user.email,authUserId:data.user.id};
-    if(remember.checked)localStorage.setItem("fenix_remember_me",JSON.stringify({user:u.id}));else localStorage.removeItem("fenix_remember_me");
-    sessionStorage.setItem("fenix_session",data.user.id);
-    start();
+    if(!supabaseClient){initSupabase();}
+    if(!supabaseClient){alert("Não foi possível conectar ao sistema de autenticação.");return;}
+
+    enter.disabled=true;
+    const originalText=enter.textContent;
+    enter.textContent="Entrando...";
+    try{
+      const authResult=await supabaseClient.auth.signInWithPassword({email:u.email,password});
+      if(authResult.error){
+        await supabaseClient.auth.signOut().catch(()=>{});
+        alert("Usuário ou senha incorretos.");
+        return;
+      }
+
+      const data=authResult.data;
+      const profileResult=await supabaseClient
+        .from("perfis")
+        .select("id,nome,papel,status,professora_id")
+        .eq("id",data.user.id)
+        .maybeSingle();
+
+      if(profileResult.error || !profileResult.data){
+        await supabaseClient.auth.signOut().catch(()=>{});
+        alert("Este acesso não está configurado no perfil do sistema.");
+        return;
+      }
+
+      const profile=profileResult.data;
+      if(profile.status!=="ativo"){
+        await supabaseClient.auth.signOut().catch(()=>{});
+        alert("Este acesso está desativado.");
+        return;
+      }
+
+      if((u.tipo==="admin" && profile.papel!=="admin") || (u.tipo==="teacher" && profile.papel!=="professora")){
+        await supabaseClient.auth.signOut().catch(()=>{});
+        alert("O usuário selecionado não corresponde ao perfil autenticado.");
+        return;
+      }
+
+      authProject="current";
+      session={
+        id:profile.id,
+        nome:profile.nome||u.nome,
+        tipo:profile.papel==="admin"?"admin":"teacher",
+        teacherId:profile.professora_id,
+        email:data.user.email,
+        authUserId:data.user.id
+      };
+      supabaseReady=true;
+      await loadSupabaseDb();
+      if(remember.checked)localStorage.setItem("fenix_remember_me",JSON.stringify({user:u.id}));
+      else localStorage.removeItem("fenix_remember_me");
+      sessionStorage.setItem("fenix_session",data.user.id);
+      start();
+    }catch(err){
+      await supabaseClient.auth.signOut().catch(()=>{});
+      alert("Não foi possível concluir o acesso. Tente novamente.");
+    }finally{
+      enter.disabled=false;
+      enter.textContent=originalText;
+    }
   };
   pass.onkeydown=e=>{if(e.key==="Enter")enter.click()};
   document.getElementById("loginEye").onclick=()=>{pass.type=pass.type==="password"?"text":"password"};
-  document.getElementById("loginForgot").onclick=async()=>{const u=users.find(x=>x.id===user.value);if(!u?.email){alert("Configure o e-mail deste acesso primeiro.");return}const {error}=await supabaseClient.auth.resetPasswordForEmail(u.email,{redirectTo:location.origin+location.pathname});alert(error?"Não foi possível enviar o e-mail de recuperação.":"Enviamos as instruções para o e-mail cadastrado.")};
+  document.getElementById("loginForgot").onclick=async()=>{
+    const u=users.find(x=>x.id===user.value);
+    if(!u?.email){alert("Configure o e-mail deste acesso primeiro.");return;}
+    const {error}=await supabaseClient.auth.resetPasswordForEmail(u.email,{redirectTo:location.origin+location.pathname});
+    alert(error?"Não foi possível enviar o e-mail de recuperação.":"Enviamos as instruções para o e-mail cadastrado.");
+  };
 }
 
 async function startContractAcceptance(){
