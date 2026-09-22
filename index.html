@@ -174,7 +174,7 @@ const META_CONFIG = Object.freeze({
 let metaSdkReady = false;
 
 window.fbAsyncInit = function(){
-  FB.init({appId:META_CONFIG.appId,cookie:true,xfbml:false,version:"v25.0"});
+  FB.init({appId:META_CONFIG.appId,cookie:true,xfbml:false,version:"v25.0",fedCM:false});
   metaSdkReady = true;
 };
 
@@ -215,7 +215,7 @@ function launchMetaCoexistencia(){
   if(metaSdkReady) launch();
   else {
     const started=typeof FB!=="undefined";
-    if(started){FB.init({appId:META_CONFIG.appId,cookie:true,xfbml:false,version:"v25.0"});metaSdkReady=true;launch();}
+    if(started){FB.init({appId:META_CONFIG.appId,cookie:true,xfbml:false,version:"v25.0",fedCM:false});metaSdkReady=true;launch();}
     else {metaStatus("A conexão da Meta ainda está carregando. Tente novamente em alguns segundos.");}
   }
 }
