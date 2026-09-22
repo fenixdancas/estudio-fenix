@@ -598,6 +598,19 @@ startFenix();
 async function start(){
   document.getElementById("loginScreen").style.display="none";document.getElementById("app").style.display="block";
   document.getElementById("loggedName").textContent=session.nome;document.getElementById("avatar").textContent=session.nome[0].toUpperCase();document.getElementById("today").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});applyAccess();render();
+  document.querySelectorAll(".nav button[data-view]").forEach(button=>{
+    button.onclick=()=>go(button.dataset.view);
+  });
+  document.getElementById("logoutBtn").onclick=logout;
+}
+
+async function logout(){
+  try{if(supabaseClient)await supabaseClient.auth.signOut()}catch(_){ }
+  session=null;
+  sessionStorage.removeItem("fenix_session");
+  document.getElementById("app").style.display="none";
+  document.getElementById("loginScreen").style.display="grid";
+  await renderLogin();
 }
 
 function teacherIdMatches(a,b){
