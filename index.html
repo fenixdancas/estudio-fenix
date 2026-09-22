@@ -759,6 +759,19 @@ function bind(){
  }
 }
 
+function openM(title,content){
+ const modal=document.getElementById("modal"), box=document.getElementById("modalbox");
+ if(!modal||!box)return;
+ box.innerHTML=`<div class="modal-head"><h2>${esc(title)}</h2><button type="button" class="btn" onclick="closeM()" aria-label="Fechar">✕</button></div>${content}`;
+ box.scrollTop=0;
+ modal.classList.add("open");
+}
+function closeM(){
+ const modal=document.getElementById("modal"), box=document.getElementById("modalbox");
+ if(modal)modal.classList.remove("open");
+ if(box)box.innerHTML="";
+}
+
 function irEtapa(id){
  const el=document.getElementById(id);
  const box=document.getElementById("modalbox");
