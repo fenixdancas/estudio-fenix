@@ -57,12 +57,15 @@ test('Legacy browser teacher data never overrides Supabase',async()=>{
  assert.notEqual(t.a.db.teachers[0].foto,'data:image/png;base64,AAAA');
  t.close();
 });
-test('Legacy-only teachers do not appear in login choices',async()=>{
+test('Legacy login label may appear but cannot bypass Supabase profile authorization',async()=>{
  const t=app();
  t.a.db={...t.a.db,teachers:[]};
- t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:88,nome:'Fantasma legado',email:'legacy@example.test',acessoAtivo:true}]}));
+ t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:88,nome:'Professora antiga',email:'legacy@example.test',acessoAtivo:true}]}));
+ t.client.auth.signInWithPassword=async()=>({data:{user:{id:'none',email:'legacy@example.test'}}});
  await t.a.renderLogin();
- assert(!t.w.document.getElementById('loginUser').textContent.includes('Fantasma legado'));
- assert.match(t.w.document.getElementById('loginUser').textContent,/Outro acesso/);
+ const select=t.w.document.getElementById('loginUser');select.value='prof:88';select.onchange();
+ assert.match(select.textContent,/Professora antiga/);
+ await t.w.document.getElementById('loginEnter').onclick({preventDefault(){}});
+ assert.equal(t.a.session,null);
  t.close();
 });
