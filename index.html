@@ -414,7 +414,10 @@ async function saveRecord(collection,row){
  const old=original?JSON.parse(original):null;
  const remote=(t,x)=>{const v=remoteForLocal(t,x);if(!v)throw new Error('Salve primeiro o cadastro vinculado.');return v;};
  let fields={}, links=null;
- if(collection==='teachers')fields={nome:row.nome,telefone:row.fone||null,foto_url:row.foto||null,status:row.acessoAtivo===false?'inativo':'ativo'};
+ if(collection==='teachers'){
+  const foto=typeof row.foto==='string'&&!row.foto.startsWith('data:')?row.foto:null;
+  fields={nome:row.nome,telefone:row.fone||null,foto_url:foto,status:row.acessoAtivo===false?'inativo':'ativo'};
+ }
  if(collection==='classes'){
   const mods=await sbSelect('modalidades');const mod=mods.find(m=>m.nome===row.modalidade);
   if(!mod)throw new Error('A modalidade selecionada precisa estar cadastrada no banco.');
