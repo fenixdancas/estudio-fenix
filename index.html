@@ -398,9 +398,26 @@ async function recoverLegacyIfDatabaseEmpty(){
   if(error)throw new Error('Não foi possível recuperar as modalidades. '+error.message);
  }
 
- if(needsTeachers)db.teachers=clone(legacyTeachers);
- if(needsClasses)db.classes=clone(legacyClasses);
- await syncChangedData();
+ if(needsTeachers){
+  db.teachers=clone(legacyTeachers);
+  // Professoras must exist remotely before turmas can reference them.
+  for(const row of db.teachers){
+   const snapshot=clone(row);
+   await saveRecord('teachers',snapshot);
+   row._version=snapshot._version;
+   baseline['teachers:'+row.id]=JSON.stringify(snapshot);
+  }
+ }
+ if(needsClasses){
+  db.classes=clone(legacyClasses);
+  for(const row of db.classes){
+   const snapshot=clone(row);
+   await saveRecord('classes',snapshot);
+   row._version=snapshot._version;
+   baseline['classes:'+row.id]=JSON.stringify(snapshot);
+  }
+ }
+ saveLocalOnly();
  await loadSupabaseDb();
  return true;
 }
