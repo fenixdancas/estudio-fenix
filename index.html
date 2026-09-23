@@ -168,7 +168,8 @@ const LOGO = "./logo-fenix-marca.png";
 const FE = "./fenix-elemento.png";
 const META_CONFIG = Object.freeze({
   appId: "1519791146860663",
-  configId: "2281774802614136"
+  configId: "2281774802614136",
+  onboardingUrl: "https://business.facebook.com/messaging/whatsapp/onboard/?app_id=1519791146860663&config_id=2281774802614136&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=https%3A%2F%2Ffenixdancas.github.io%2Festudio-fenix%2Fmeta-callback.html"
 });
 
 let metaSdkReady = false;
@@ -182,6 +183,8 @@ function metaStatus(text,ok=false){
   const el=document.getElementById("metaCoexistenciaStatus");
   if(el){el.textContent=text;el.className=ok?"badge ok":"small muted";}
 }
+
+let metaAuthPopup=null;
 
 
 async function concluirMetaCoexistencia(code){
@@ -197,30 +200,24 @@ async function concluirMetaCoexistencia(code){
 }
 
 function launchMetaCoexistencia(){
-  if(!metaSdkReady || typeof FB==="undefined"){
-    metaStatus("A conexão da Meta ainda está carregando. Tente novamente em alguns segundos.");
+  metaAuthPopup=window.open(META_CONFIG.onboardingUrl,"metaCoexistencia","width=620,height=760,resizable=yes,scrollbars=yes");
+  if(!metaAuthPopup){
+    metaStatus("O navegador bloqueou a janela da Meta.");
+    alert("Permita pop-ups para o Sistema Fênix e tente novamente.");
     return;
   }
-  metaStatus("Abrindo a conexão oficial da Meta...");
-  FB.login(function(response){
-    const code=response?.authResponse?.code;
-    if(!code){
-      metaStatus("A conexão não foi concluída.");
-      return;
-    }
-    metaStatus("Meta autorizada. Finalizando conexão...");
-    concluirMetaCoexistencia(code);
-  },{
-    config_id:META_CONFIG.configId,
-    response_type:"code",
-    override_default_response_type:true,
-    extras:{
-      setup:{},
-      featureType:"whatsapp_business_app_onboarding",
-      sessionInfoVersion:"3"
-    }
-  });
+  metaStatus("Conclua a autorização na janela oficial da Meta.");
 }
+
+window.addEventListener("message",function(event){
+  if(event.origin!==location.origin || event.source!==metaAuthPopup || event.data?.type!=="FENIX_META_OAUTH") return;
+  if(event.data.error || !event.data.code){
+    metaStatus("A conexão não foi concluída.");
+    return;
+  }
+  metaStatus("Meta autorizada. Finalizando conexão...");
+  concluirMetaCoexistencia(event.data.code);
+});
 
 window.addEventListener("message",function(event){
   if(event.origin!=="https://www.facebook.com") return;
