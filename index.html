@@ -582,7 +582,7 @@ async function renderLogin(){
       const cached=safeRead(KEY+':'+cacheOwner,null);
       remoteIds=cached?.remoteIds||{};
       await loadSupabaseDb();
-      await recoverLegacyIfDatabaseEmpty();
+      // Legacy browser data is retained only as an explicit backup. Never merge it automatically.
       if(session.tipo==='teacher'&&!db.teachers.some(t=>remoteForLocal('professoras',t.id)===session.teacherId&&t.acessoAtivo))throw new Error('O cadastro da professora está desativado ou sem vínculo.');
       if(cached?.pending){
         // Keep the pending version for explicit, reviewed recovery. Never silently merge stale rows.
