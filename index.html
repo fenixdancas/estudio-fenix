@@ -378,7 +378,7 @@ async function loadSupabaseDb(){
    (norm(a.nome)&&norm(a.nome)===norm(b.nome));
  };
  for(const t of next.teachers){
-  if(String(t.nome||'').trim().toLowerCase().includes('rawnie')&&!t.foto)t.foto='rawnie.jpg';
+  if(String(t.nome||'').trim().toLowerCase().includes('rawnie'))t.foto='rawnie.jpg';
   const matches=legacyTeachersForDisplay.filter(x=>sameTeacher(t,x));
   // A professora may exist more than once in the old copy. Recover each missing
   // field from whichever duplicate actually contains it instead of trusting the first match.
