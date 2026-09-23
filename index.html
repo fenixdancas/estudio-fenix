@@ -330,9 +330,11 @@ function saveLocalOnly(){
  catch{setSaveStatus('Não foi possível guardar a cópia neste aparelho. Exporte os dados antes de sair.','bad');}
 }
 function preservePreviousCache(){
- // Preserve the original unscoped cache once, never overwrite it with another user's data.
- const previous=localStorage.getItem(KEY);
- if(previous&&!localStorage.getItem(KEY+':pre-audit'))localStorage.setItem(KEY+':pre-audit',previous);
+ // The legacy cache is optional. A full browser store must never block authentication.
+ try{
+  const previous=localStorage.getItem(KEY);
+  if(previous&&!localStorage.getItem(KEY+':pre-audit'))localStorage.setItem(KEY+':pre-audit',previous);
+ }catch(_){}
 }
 function remoteId(table,id){return remoteForLocal(table,id);}
 function rememberRemoteId(table,id,rid){remoteIds[table+':'+id]=rid;remoteIds[table+':'+rid+':local']=id;}
