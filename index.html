@@ -516,7 +516,18 @@ function allLoginUsers(){
     {id:"nahid",nome:"Nahid",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.nahid},
     {id:"tati",nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}
   ];
-  uniqueTeachers().forEach(t=>{if(t.email)a.push({id:"prof:"+t.id,nome:t.apelido||t.nome,tipo:"teacher",email:t.email,teacherId:t.id,ativo:t.acessoAtivo!==false})});
+  // Before authentication the protected Supabase teacher records are unavailable.
+  // The old browser copy is used only to label known login choices; authentication
+  // and permissions are always confirmed by Supabase after sign-in.
+  const legacyLogin=safeRead(KEY,null);
+  const legacyLoginTeachers=Array.isArray(legacyLogin?.teachers)?legacyLogin.teachers:[];
+  const loginTeachers=[...uniqueTeachers()];
+  for(const old of legacyLoginTeachers){
+   const current=loginTeachers.find(t=>teachersMatch(t,old));
+   if(current){for(const field of ['email','nome'])if(!current[field]&&old[field])current[field]=old[field];}
+   else loginTeachers.push(old);
+  }
+  loginTeachers.forEach(t=>{if(t.email)a.push({id:"prof:"+t.id,nome:t.apelido||t.nome,tipo:"teacher",email:t.email,teacherId:t.id,ativo:t.acessoAtivo!==false})});
   a.push({id:"email",nome:"Outro acesso (e-mail)",tipo:"email",email:""});
   const seen=new Set();
   return a.filter(u=>{
