@@ -49,19 +49,20 @@ test('Duplicate teachers sharing phone are consolidated even when metadata diffe
  assert.equal(t.a.uniqueTeachers().length,1);
  t.close();
 });
-test('Legacy teacher data restores missing photo and email after Supabase load',async()=>{
+test('Legacy browser teacher data never overrides Supabase',async()=>{
  const t=app();
- t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:77,nome:'Professora A',fone:'',email:'legacy@example.test',foto:'data:image/png;base64,AAAA'}]}));
+ t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:77,nome:'Professora A',email:'legacy@example.test',foto:'data:image/png;base64,AAAA'}]}));
  await t.a.loadSupabaseDb();
  assert.equal(t.a.db.teachers[0].email,'teacher@example.test');
- assert.equal(t.a.db.teachers[0].foto,'data:image/png;base64,AAAA');
+ assert.notEqual(t.a.db.teachers[0].foto,'data:image/png;base64,AAAA');
  t.close();
 });
-test('Named legacy teachers appear in login choices before authentication',async()=>{
+test('Legacy-only teachers do not appear in login choices',async()=>{
  const t=app();
  t.a.db={...t.a.db,teachers:[]};
- t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:88,nome:'Rawnie',email:'rawnie@example.test',acessoAtivo:true}]}));
+ t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:88,nome:'Fantasma legado',email:'legacy@example.test',acessoAtivo:true}]}));
  await t.a.renderLogin();
- assert.match(t.w.document.getElementById('loginUser').textContent,/Rawnie/);
+ assert(!t.w.document.getElementById('loginUser').textContent.includes('Fantasma legado'));
+ assert.match(t.w.document.getElementById('loginUser').textContent,/Outro acesso/);
  t.close();
 });
