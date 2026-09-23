@@ -19,6 +19,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Instalar dependências
+        run: npm ci
       - name: Validar sistema
         run: npm run validate
       - name: Executar testes automatizados
