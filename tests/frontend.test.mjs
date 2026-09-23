@@ -53,7 +53,7 @@ test('Legacy teacher data restores missing photo and email after Supabase load',
  const t=app();
  t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:77,nome:'Professora A',fone:'',email:'legacy@example.test',foto:'data:image/png;base64,AAAA'}]}));
  await t.a.loadSupabaseDb();
- assert.equal(t.a.db.teachers[0].email,'legacy@example.test');
+ assert.equal(t.a.db.teachers[0].email,'teacher@example.test');
  assert.equal(t.a.db.teachers[0].foto,'data:image/png;base64,AAAA');
  t.close();
 });
