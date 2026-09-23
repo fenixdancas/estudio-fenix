@@ -457,7 +457,7 @@ async function saveRecord(collection,row){
  if(collection==='attendance'&&!visibleClasses().some(c=>String(c.id)===String(row.turmaId)))throw new Error('Turma não autorizada.');
  const id=ensureRemote(table,row.id), original=baseline[collection+':'+row.id];
  const old=original?JSON.parse(original):null;
- const remote=(t,x)=>{const v=remoteForLocal(t,x);if(!v)throw new Error('Salve primeiro o cadastro vinculado.');return v;};
+ const remote=(t,x)=>{const v=remoteForLocal(t,x);if(!v)throw new Error('Vínculo ausente ao salvar '+collection+': '+t+' ('+String(x??'sem identificação')+').');return v;};
  let fields={}, links=null;
  if(collection==='teachers'){
   const foto=typeof row.foto==='string'&&!row.foto.startsWith('data:')?row.foto:null;
