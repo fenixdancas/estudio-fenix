@@ -486,7 +486,7 @@ async function renderLogin(){
     try{
       initSupabase();authProject="current";
       const {data,error}=await supabaseClient.auth.signInWithPassword({email:u.email,password});
-      if(error)throw new Error(error.status===400?"Não foi possível entrar. Confira o acesso e a senha.":"Não foi possível consultar a autenticação. Tente novamente.");
+      if(error){const detalhe=[error.message,error.code,error.status].filter(Boolean).join(" | ");throw new Error("Falha na autenticação: "+(detalhe||"erro não informado pelo Supabase."));}
       const pr=await supabaseClient.from("perfis").select("id,nome,papel,status,professora_id").eq("id",data.user.id).single();
       const profile=pr.data;
       if(pr.error||!profile||profile.status!=="ativo"||!["admin","professora","teacher"].includes(profile.papel))throw new Error("Este acesso está desativado ou não foi configurado na base atual.");
