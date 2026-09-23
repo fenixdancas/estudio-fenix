@@ -409,6 +409,19 @@ async function recoverLegacyIfDatabaseEmpty(){
   }
  }
  if(needsClasses){
+  // Reconnect legacy teacher IDs to professoras that may already have been migrated.
+  for(const lt of legacyTeachers){
+   if(remoteForLocal('professoras',lt.id))continue;
+   const current=db.teachers.find(t=>
+    (lt.cpf&&t.cpf&&String(t.cpf)===String(lt.cpf))||
+    (lt.email&&t.email&&String(t.email).toLowerCase()===String(lt.email).toLowerCase())||
+    String(t.nome||'').trim().toLowerCase()===String(lt.nome||'').trim().toLowerCase()
+   );
+   if(current){
+    const rid=remoteForLocal('professoras',current.id);
+    if(rid)rememberRemoteId('professoras',lt.id,rid);
+   }
+  }
   db.classes=clone(legacyClasses);
   for(const row of db.classes){
    const snapshot=clone(row);
