@@ -367,7 +367,7 @@ async function loadSupabaseDb(){
  next.classes=map('turmas',data.turmas,r=>({nome:r.nome,modalidade:mods[r.modalidade_id]||'',dia:dayNames[r.dia_semana],hora:String(r.horario||'').slice(0,5),profId:byId.professoras[r.professora_id]||'',status:r.status,limite:r.limite_alunos,obs:r.observacao||''}));
  next.students=map('alunas',data.alunas,r=>({nome:r.nome,nasc:r.data_nascimento||'',cpf:r.cpf||'',rg:r.rg||'',fone:r.telefone||'',email:r.email||'',endereco:r.endereco||'',foto:r.foto_url||'',respNome:r.responsavel_nome||'',respCpf:r.responsavel_cpf||'',respFone:r.responsavel_telefone||'',respParentesco:r.responsavel_parentesco||'',menor:r.menor,status:r.status,mensalidade:r.dados_fenix?.mensalidade??null,turmaIds:data.matriculas_turmas.filter(m=>m.aluna_id===r.id&&m.status==='ativa').map(m=>byId.turmas[m.turma_id]).filter(Boolean)}));
  for(const s of next.students){s.modalidades=[...new Set(s.turmaIds.map(id=>next.classes.find(c=>c.id===id)?.modalidade).filter(Boolean))];}
- const finance=map('financeiro',data.financeiro,r=>({studentId:byId.alunas[r.aluna_id]||null,aluno:next.students.find(s=>s.id===byId.alunas[r.aluna_id])?.nome||r.descricao,nome:r.descricao,comp:r.descricao,valor:Number(r.valor||0),venc:r.vencimento||'',pago:r.status==='pago',data:r.pago_em?String(r.pago_em).slice(0,10):'',forma:r.forma_pagamento||'',_tipo:r.tipo}));
+ const finance=map('financeiro',data.financeiro,r=>({studentId:byId.alunas[r.aluna_id]||null,aluno:next.students.find(s=>s.id===byId.alunas[r.aluna_id])?.nome||r.descricao,nome:r.descricao,comp:r.descricao,valor:Number(r.valor||0),venc:r.vencimento||'',pago:r.status==='pago',data:r.pago_em?String(r.pago_em).slice(0,10):'',forma:r.forma_pagamento||'',_tipo:r.tipo,_status:r.status,_pagoEm:r.pago_em||null}));
  next.payments=finance.filter(r=>r._tipo!=='saida');next.expenses=finance.filter(r=>r._tipo==='saida');
  next.events=map('eventos',data.eventos,r=>({nome:r.nome,data:r.data,local:r.local||'',obs:r.observacao||'',turmaId:byId.turmas[r.turma_id]||'',status:r.dados_fenix?.status||'Planejado'}));
  next.commemorative=map('datas_comemorativas',data.datas_comemorativas,r=>({nome:r.nome,data:r.data,obs:r.observacao||''}));
@@ -409,7 +409,7 @@ async function saveRecord(collection,row){
  }
  if(collection==='payments'||collection==='expenses'){
   if(!Number.isFinite(Number(row.valor))||Number(row.valor)<0)throw new Error('Informe um valor válido.');
-  fields={tipo:collection==='expenses'?'saida':row._tipo||'mensalidade',descricao:row.comp||row.nome||row.aluno,valor:Number(row.valor),vencimento:row.venc||null,status:row.pago?'pago':'em_aberto',pago_em:row.pago&&row.data?row.data+'T12:00:00-03:00':null};
+  fields={tipo:collection==='expenses'?'saida':row._tipo||'mensalidade',descricao:row.comp||row.nome||row.aluno,valor:Number(row.valor),vencimento:row.venc||null,status:row.pago?'pago':(['negociado','cancelado'].includes(row._status)?row._status:'em_aberto'),pago_em:row.pago?(old?.pago&&old.data===row.data?row._pagoEm:row.data?row.data+'T12:00:00-03:00':null):null};
   if(collection==='payments'){fields.aluna_id=remote('alunas',row.studentId);fields.forma_pagamento=row.forma||null;}
  }
  if(collection==='events')fields={nome:row.nome,data:row.data,local:row.local||null,observacao:row.obs||null,turma_id:row.turmaId?remote('turmas',row.turmaId):null};

@@ -66,8 +66,8 @@ begin
  if p_vinculos is not null and p_tabela='alunas' then
   if role_name<>'admin' or jsonb_typeof(p_vinculos->'turmas')<>'array' then raise exception 'Vínculos inválidos'; end if;
   select coalesce(array_agg(value::uuid),'{}') into desired from jsonb_array_elements_text(p_vinculos->'turmas');
-  -- Preserve the enrollment history. Confirm the live status enum before deployment.
-  update public.matriculas_turmas set status='inativa',fim_em=(now() at time zone 'America/Sao_Paulo')::date
+  -- Preserve enrollment history using the confirmed production enum.
+  update public.matriculas_turmas set status='encerrada',fim_em=(now() at time zone 'America/Sao_Paulo')::date
    where aluna_id=p_id and status='ativa' and not(turma_id=any(desired));
   foreach class_id in array desired loop
    if not exists(select 1 from public.turmas where id=class_id) then raise exception 'Turma não encontrada'; end if;
@@ -83,9 +83,9 @@ begin
    if not exists(select 1 from public.matriculas_turmas where aluna_id=(item->>'aluna_id')::uuid and turma_id=class_id and status='ativa') then raise exception 'Aluna não matriculada nesta turma'; end if;
    select id into existing_id from public.presencas where aula_id=p_id and aluna_id=(item->>'aluna_id')::uuid limit 1;
    if existing_id is null then
-    insert into public.presencas(aula_id,aluna_id,status,dados_fenix) values(p_id,(item->>'aluna_id')::uuid,item->>'status',item->'dados_fenix');
+    insert into public.presencas(aula_id,aluna_id,status,dados_fenix) values(p_id,(item->>'aluna_id')::uuid,(item->>'status')::public.status_presenca,item->'dados_fenix');
    else
-    update public.presencas set status=item->>'status',dados_fenix=item->'dados_fenix',fenix_version=fenix_version+1 where id=existing_id;
+    update public.presencas set status=(item->>'status')::public.status_presenca,dados_fenix=item->'dados_fenix',fenix_version=fenix_version+1 where id=existing_id;
    end if;
   end loop;
  elsif p_vinculos is not null then raise exception 'Vínculos incompatíveis'; end if;
