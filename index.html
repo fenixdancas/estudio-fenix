@@ -426,6 +426,19 @@ async function recoverLegacyIfDatabaseEmpty(){
   }
   db.classes=clone(legacyClasses);
   for(const row of db.classes){
+   // Guarantee the professora link for this specific legacy class before saving it.
+   if(!remoteForLocal('professoras',row.profId)){
+    const lt=legacyTeachers.find(t=>String(t.id)===String(row.profId));
+    if(lt){
+     const current=remoteTeachers.find(t=>{
+      const extra=t.dados_fenix||{};
+      return (digits(lt.cpf)&&digits(extra.cpf)===digits(lt.cpf))||
+       (norm(lt.email)&&norm(extra.email)===norm(lt.email))||
+       (norm(lt.nome)&&norm(t.nome)===norm(lt.nome));
+     });
+     if(current)rememberRemoteId('professoras',row.profId,current.id);
+    }
+   }
    const snapshot=clone(row);
    await saveRecord('classes',snapshot);
    row._version=snapshot._version;
