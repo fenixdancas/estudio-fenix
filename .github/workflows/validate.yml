@@ -21,3 +21,5 @@ jobs:
           node-version: 22
       - name: Validar sistema
         run: npm run validate
+      - name: Executar testes automatizados
+        run: npm test
