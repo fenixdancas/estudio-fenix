@@ -425,7 +425,22 @@ async function recoverLegacyIfDatabaseEmpty(){
    if(current)rememberRemoteId('professoras',lt.id,current.id);
   }
   db.classes=clone(legacyClasses);
+  // Some very old turmas kept a professora ID that no longer exists in the legacy teacher list.
+  // Resolve those IDs against the current professoras using the loaded class/teacher data when possible.
+  const currentTeacherByLocalId=new Map(db.teachers.map(t=>[String(t.id),t]));
   for(const row of db.classes){
+   if(!remoteForLocal('professoras',row.profId)){
+    const localTeacher=currentTeacherByLocalId.get(String(row.profId));
+    if(localTeacher){
+     const current=remoteTeachers.find(t=>{
+      const extra=t.dados_fenix||{};
+      return (digits(localTeacher.cpf)&&digits(extra.cpf)===digits(localTeacher.cpf))||
+       (norm(localTeacher.email)&&norm(extra.email)===norm(localTeacher.email))||
+       (norm(localTeacher.nome)&&norm(t.nome)===norm(localTeacher.nome));
+     });
+     if(current)rememberRemoteId('professoras',row.profId,current.id);
+    }
+   }
    // Guarantee the professora link for this specific legacy class before saving it.
    if(!remoteForLocal('professoras',row.profId)){
     const lt=legacyTeachers.find(t=>String(t.id)===String(row.profId));
