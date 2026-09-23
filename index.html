@@ -365,7 +365,7 @@ async function loadSupabaseDb(){
  const extra=r=>({...(r.dados_fenix||{}),_version:Number(r.fenix_version||0)});
  const map=(table,rows,convert)=>{byId[table]={};return (rows||[]).map(r=>{const id=localForRemote(table,r.id);byId[table][r.id]=id;return {...extra(r),...convert(r),id};});};
  const mods=Object.fromEntries(data.modalidades.map(m=>[m.id,m.nome]));
- next.teachers=map('professoras',data.professoras,r=>({nome:r.nome,fone:r.telefone||'',foto:r.foto_url||'',acessoAtivo:r.status==='ativo'}));
+ next.teachers=map('professoras',data.professoras,r=>({nome:r.nome,fone:r.telefone||'',foto:r.foto_url||r.dados_fenix?.foto||'',email:r.dados_fenix?.email||'',cpf:r.dados_fenix?.cpf||'',apelido:r.dados_fenix?.apelido||'',acessoAtivo:r.status==='ativo'}));
  next.classes=map('turmas',data.turmas,r=>({nome:r.nome,modalidade:mods[r.modalidade_id]||'',dia:dayNames[r.dia_semana],hora:String(r.horario||'').slice(0,5),profId:byId.professoras[r.professora_id]||'',status:r.status,limite:r.limite_alunos,obs:r.observacao||''}));
  next.students=map('alunas',data.alunas,r=>({nome:r.nome,nasc:r.data_nascimento||'',cpf:r.cpf||'',rg:r.rg||'',fone:r.telefone||'',email:r.email||'',endereco:r.endereco||'',foto:r.foto_url||'',respNome:r.responsavel_nome||'',respCpf:r.responsavel_cpf||'',respFone:r.responsavel_telefone||'',respParentesco:r.responsavel_parentesco||'',menor:r.menor,status:r.status,mensalidade:r.dados_fenix?.mensalidade??null,turmaIds:data.matriculas_turmas.filter(m=>m.aluna_id===r.id&&m.status==='ativa').map(m=>byId.turmas[m.turma_id]).filter(Boolean)}));
  for(const s of next.students){s.modalidades=[...new Set(s.turmaIds.map(id=>next.classes.find(c=>c.id===id)?.modalidade).filter(Boolean))];}
@@ -524,8 +524,24 @@ function allLoginUsers(){
 }
 
 // Do not merge people by name: homonyms are different records.
-function removeDuplicateTeachers(){}
-function uniqueTeachers(){return db.teachers;}
+function teacherIdentityKey(t){
+ const cpf=String(t?.cpf||'').replace(/\D/g,'');
+ const email=String(t?.email||'').trim().toLowerCase();
+ const phone=String(t?.fone||'').replace(/\D/g,'');
+ const name=String(t?.nome||'').trim().toLowerCase();
+ return cpf?'cpf:'+cpf:email?'email:'+email:phone?'phone:'+phone:'name:'+name;
+}
+function uniqueTeachers(){
+ const groups=new Map();
+ for(const t of db.teachers){
+  const key=teacherIdentityKey(t);
+  if(!groups.has(key)){groups.set(key,{...t,_teacherIds:[t.id]});continue;}
+  const keep=groups.get(key);keep._teacherIds.push(t.id);
+  for(const field of ['nome','apelido','fone','email','cpf','foto'])if(!keep[field]&&t[field])keep[field]=t[field];
+  keep.acessoAtivo=keep.acessoAtivo||t.acessoAtivo;
+ }
+ return [...groups.values()];
+}
 
 async function renderLogin(){
   const users=allLoginUsers();
@@ -705,7 +721,7 @@ painel:()=>{
 alunos:()=>head("Alunos","Cadastros, fichas, saúde, contrato e histórico.",session?.tipo==="teacher"?"":`<button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button>`)+
  `<div class="panel"><div class="toolbar"><input id="studentSearch" class="search" placeholder="Buscar por nome ou WhatsApp"><span class="muted">${visibleStudents().length} aluno(s)</span></div><div id="studentTable"></div></div>`,
 professores:()=>head("Professores","Cadastro dos professores e classes vinculadas.",`<button class="btn primary" onclick="novoProfessor()">＋ Novo professor</button>`)+
- `<div class="panel"><table><tr><th>Nome</th><th>Contato</th><th>Classes</th><th></th></tr>${uniqueTeachers().map(t=>`<tr><td><div style="display:flex;align-items:center;gap:10px">${t.foto?`<img class="avatar-img" src="${safePhoto(t.foto)}" alt="">`:`<div class="avatar">${esc((t.apelido||t.nome||"P").slice(0,1).toUpperCase())}</div>`}<strong>${esc(t.apelido||t.nome)}</strong></div></td><td>${esc(t.fone||"—")}</td><td>${db.classes.filter(c=>c.profId==t.id).map(c=>esc(c.nome)).join(", ")||"—"}</td><td><button class="btn" onclick="novoProfessor(${t.id})">Abrir cadastro</button></td></tr>`).join("")||tableEmpty(4)}</table></div>`,
+ `<div class="panel"><table><tr><th>Nome</th><th>Contato</th><th>Classes</th><th></th></tr>${uniqueTeachers().map(t=>`<tr><td><div style="display:flex;align-items:center;gap:10px">${t.foto?`<img class="avatar-img" src="${safePhoto(t.foto)}" alt="">`:`<div class="avatar">${esc((t.apelido||t.nome||"P").slice(0,1).toUpperCase())}</div>`}<strong>${esc(t.apelido||t.nome)}</strong></div></td><td>${esc(t.fone||"—")}</td><td>${db.classes.filter(c=>(t._teacherIds||[t.id]).some(id=>teacherIdMatches(c.profId,id))).map(c=>esc(c.nome)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||"—"}</td><td><button class="btn" onclick="novoProfessor(${t.id})">Abrir cadastro</button></td></tr>`).join("")||tableEmpty(4)}</table></div>`,
 turmas:()=>{const cs=visibleClasses();return head("Turmas","Modalidade, dias, horários e professora responsável.",session?.tipo==="teacher"?"":`<button class="btn primary" onclick="novaTurma()">＋ Nova turma</button>`)+
  `<div class="panel"><table><tr><th>Turma</th><th>Modalidade</th><th>Dia</th><th>Horário</th><th>Professora</th><th>Alunos</th><th></th></tr>${cs.map(c=>`<tr><td><strong>${esc(c.nome)}</strong></td><td>${esc(c.modalidade)}</td><td>${esc(c.dia)}</td><td>${esc(c.hora)}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,c.profId))?.nome||"—")}</td><td>${db.students.filter(s=>(Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId!=null?[s.turmaId]:[])).some(id=>teacherIdMatches(id,c.id))).length}</td><td>${session?.tipo==="teacher"?"":`<button class="btn" onclick="novaTurma(${c.id})">Abrir</button>`}</td></tr>`).join("")||tableEmpty(7)}</table></div>`},
 presenca:()=>{const ats=session?.tipo==="teacher"?db.attendance.filter(a=>visibleClasses().some(c=>teacherIdMatches(c.id,a.turmaId))):db.attendance;return head("Lista de presença","Registre a presença de cada aula e mantenha o histórico.",`<button class="btn primary" onclick="novaPresenca()">＋ Registrar presença</button>`)+
