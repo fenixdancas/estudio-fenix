@@ -386,66 +386,6 @@ async function loadSupabaseDb(){
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
 }
-async function recoverLegacyIfDatabaseEmpty(){
- if(session?.tipo!=='admin')return false;
- const legacy=safeRead(KEY,null);
- if(!legacy||typeof legacy!=='object')return false;
- const legacyTeachers=Array.isArray(legacy.teachers)?legacy.teachers:[];
- const legacyClasses=Array.isArray(legacy.classes)?legacy.classes:[];
- const needsTeachers=legacyTeachers.length>db.teachers.length;
- const needsClasses=legacyClasses.length>0&&db.classes.length===0;
- if(!needsTeachers&&!needsClasses)return false;
-
- const norm=v=>String(v||'').trim().toLowerCase();
- const digits=v=>String(v||'').replace(/\D/g,'');
- const modalityNames=[...new Set(legacyClasses.map(c=>String(c.modalidade||'').trim()).filter(Boolean))];
- if(modalityNames.length){
-  const {error}=await supabaseClient.from('modalidades').upsert(modalityNames.map(nome=>({nome})),{onConflict:'nome',ignoreDuplicates:true});
-  if(error)throw new Error('Não foi possível recuperar as modalidades. '+error.message);
- }
-
- // Reuse professoras that already exist. Only create a legacy professora when no
- // current record matches her identity. This preserves the original legacy ID map.
- const remoteTeachers=await sbSelect('professoras');
- const findRemoteTeacher=lt=>remoteTeachers.find(t=>{
-  const extra=t.dados_fenix||{};
-  return (digits(lt.cpf)&&digits(extra.cpf)===digits(lt.cpf))||
-   (norm(lt.email)&&norm(extra.email)===norm(lt.email))||
-   (norm(lt.nome)&&norm(t.nome)===norm(lt.nome));
- });
- for(const lt of legacyTeachers){
-  let current=findRemoteTeacher(lt);
-  if(current){
-   rememberRemoteId('professoras',lt.id,current.id);
-   continue;
-  }
-  const snapshot=clone(lt);
-  await saveRecord('teachers',snapshot);
-  lt._version=snapshot._version;
-  const rid=remoteForLocal('professoras',lt.id);
-  if(rid)remoteTeachers.push({id:rid,nome:lt.nome,dados_fenix:cleanExtra(lt)});
- }
-
- if(needsClasses){
-  db.classes=clone(legacyClasses);
-  for(const row of db.classes){
-   if(!remoteForLocal('professoras',row.profId)){
-    const lt=legacyTeachers.find(t=>String(t.id)===String(row.profId));
-    if(!lt)throw new Error('A turma "'+String(row.nome||'sem nome')+'" aponta para uma professora que não existe na cópia antiga. ID: '+String(row.profId||'vazio')+'.');
-    const current=findRemoteTeacher(lt);
-    if(current)rememberRemoteId('professoras',row.profId,current.id);
-   }
-   if(!remoteForLocal('professoras',row.profId))throw new Error('Não foi possível identificar a professora da turma "'+String(row.nome||'sem nome')+'".');
-   const snapshot=clone(row);
-   await saveRecord('classes',snapshot);
-   row._version=snapshot._version;
-   baseline['classes:'+row.id]=JSON.stringify(snapshot);
-  }
- }
- saveLocalOnly();
- await loadSupabaseDb();
- return true;
-}
 function cleanExtra(row){const result=clone(row);for(const k of ['id','_version','senha','password','access_token','refresh_token','_tipo'])delete result[k];return result;}
 async function saveRecord(collection,row){
  const table=COLLECTIONS[collection];if(!table)throw new Error('Tipo de registro inválido.');
