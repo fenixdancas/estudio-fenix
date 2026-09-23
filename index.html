@@ -366,27 +366,9 @@ async function loadSupabaseDb(){
  const map=(table,rows,convert)=>{byId[table]={};return (rows||[]).map(r=>{const id=localForRemote(table,r.id);byId[table][r.id]=id;return {...extra(r),...convert(r),id};});};
  const mods=Object.fromEntries(data.modalidades.map(m=>[m.id,m.nome]));
  next.teachers=map('professoras',data.professoras,r=>({nome:r.nome,fone:r.telefone||'',foto:r.foto_url||r.dados_fenix?.foto||'',email:r.dados_fenix?.email||'',cpf:r.dados_fenix?.cpf||'',apelido:r.dados_fenix?.apelido||'',acessoAtivo:r.status==='ativo'}));
- // Complete missing presentation/login data from the untouched legacy copy on this device.
- const legacyForDisplay=safeRead(KEY,null);
- const legacyTeachersForDisplay=Array.isArray(legacyForDisplay?.teachers)?legacyForDisplay.teachers:[];
- const sameTeacher=(a,b)=>{
-  const digits=v=>String(v||'').replace(/\D/g,'');
-  const norm=v=>String(v||'').trim().toLowerCase();
-  return (digits(a.cpf)&&digits(a.cpf)===digits(b.cpf))||
-   (norm(a.email)&&norm(a.email)===norm(b.email))||
-   (digits(a.fone)&&digits(a.fone)===digits(b.fone))||
-   (norm(a.nome)&&norm(a.nome)===norm(b.nome));
- };
+ // Supabase is the source of truth for professoras. The browser copy is backup/recovery only.
  for(const t of next.teachers){
   if(String(t.nome||'').trim().toLowerCase().includes('rawnie'))t.foto='rawnie.jpg';
-  const matches=legacyTeachersForDisplay.filter(x=>sameTeacher(t,x));
-  // A professora may exist more than once in the old copy. Recover each missing
-  // field from whichever duplicate actually contains it instead of trusting the first match.
-  for(const field of ['foto','email','cpf','apelido','fone']){
-   if(t[field])continue;
-   const source=matches.find(x=>x[field]);
-   if(source)t[field]=source[field];
-  }
  }
  next.classes=map('turmas',data.turmas,r=>({nome:r.nome,modalidade:mods[r.modalidade_id]||'',dia:dayNames[r.dia_semana],hora:String(r.horario||'').slice(0,5),profId:byId.professoras[r.professora_id]||'',status:r.status,limite:r.limite_alunos,obs:r.observacao||''}));
  next.students=map('alunas',data.alunas,r=>({nome:r.nome,nasc:r.data_nascimento||'',cpf:r.cpf||'',rg:r.rg||'',fone:r.telefone||'',email:r.email||'',endereco:r.endereco||'',foto:r.foto_url||'',respNome:r.responsavel_nome||'',respCpf:r.responsavel_cpf||'',respFone:r.responsavel_telefone||'',respParentesco:r.responsavel_parentesco||'',menor:r.menor,status:r.status,mensalidade:r.dados_fenix?.mensalidade??null,turmaIds:data.matriculas_turmas.filter(m=>m.aluna_id===r.id&&m.status==='ativa').map(m=>byId.turmas[m.turma_id]).filter(Boolean)}));
@@ -534,15 +516,7 @@ function allLoginUsers(){
     {id:"nahid",nome:"Nahid",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.nahid},
     {id:"tati",nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}
   ];
-  const legacyLogin=safeRead(KEY,null);
-  const legacyLoginTeachers=Array.isArray(legacyLogin?.teachers)?legacyLogin.teachers:[];
-  const loginTeachers=[...uniqueTeachers()];
-  for(const old of legacyLoginTeachers){
-   const current=loginTeachers.find(t=>teachersMatch(t,old));
-   if(current){for(const field of ['email','nome'])if(!current[field]&&old[field])current[field]=old[field];}
-   else loginTeachers.push(old);
-  }
-  loginTeachers.forEach(t=>{if(t.email)a.push({id:"prof:"+t.id,nome:t.apelido||t.nome,tipo:"teacher",email:t.email,teacherId:t.id,ativo:t.acessoAtivo!==false})});
+  uniqueTeachers().forEach(t=>{if(t.email)a.push({id:"prof:"+t.id,nome:t.apelido||t.nome,tipo:"teacher",email:t.email,teacherId:t.id,ativo:t.acessoAtivo!==false})});
   a.push({id:"email",nome:"Outro acesso (e-mail)",tipo:"email",email:""});
   const seen=new Set();
   return a.filter(u=>{
