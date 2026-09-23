@@ -38,3 +38,30 @@ test('Financial edits preserve negotiated and cancelled status and payment times
   assert.equal(t.client.tables.financeiro[0].pago_em,status==='pago'?timestamp:null);t.close();
  }
 });
+
+test('Duplicate teachers sharing phone are consolidated even when metadata differs',async()=>{
+ const tables=fixtures();
+ tables.professoras=[
+  {id:ids.teacher,nome:'Alê',telefone:'11983190510',status:'ativo',dados_fenix:{email:'ale@example.test'}},
+  {id:ids.teacher2,nome:'Alê',telefone:'11983190510',status:'ativo',dados_fenix:{}}
+ ];
+ const t=app(fakeClient(tables));await t.a.loadSupabaseDb();
+ assert.equal(t.a.uniqueTeachers().length,1);
+ t.close();
+});
+test('Legacy teacher data restores missing photo and email after Supabase load',async()=>{
+ const t=app();
+ t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:77,nome:'Professora A',fone:'',email:'legacy@example.test',foto:'data:image/png;base64,AAAA'}]}));
+ await t.a.loadSupabaseDb();
+ assert.equal(t.a.db.teachers[0].email,'legacy@example.test');
+ assert.equal(t.a.db.teachers[0].foto,'data:image/png;base64,AAAA');
+ t.close();
+});
+test('Named legacy teachers appear in login choices before authentication',async()=>{
+ const t=app();
+ t.a.db={...t.a.db,teachers:[]};
+ t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:88,nome:'Rawnie',email:'rawnie@example.test',acessoAtivo:true}]}));
+ await t.a.renderLogin();
+ assert.match(t.w.document.getElementById('loginUser').textContent,/Rawnie/);
+ t.close();
+});
