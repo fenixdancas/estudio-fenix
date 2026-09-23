@@ -183,7 +183,6 @@ function metaStatus(text,ok=false){
   if(el){el.textContent=text;el.className=ok?"badge ok":"small muted";}
 }
 
-let metaAuthPopup=null;
 
 async function concluirMetaCoexistencia(code){
   try{
@@ -198,47 +197,30 @@ async function concluirMetaCoexistencia(code){
 }
 
 function launchMetaCoexistencia(){
-  const state=crypto.randomUUID();
-  sessionStorage.setItem("metaOAuthState",state);
-  const redirectUri=new URL("meta-callback.html",location.href).href;
-  const params=new URLSearchParams({
-    client_id:META_CONFIG.appId,
+  if(!metaSdkReady || typeof FB==="undefined"){
+    metaStatus("A conexão da Meta ainda está carregando. Tente novamente em alguns segundos.");
+    return;
+  }
+  metaStatus("Abrindo a conexão oficial da Meta...");
+  FB.login(function(response){
+    const code=response?.authResponse?.code;
+    if(!code){
+      metaStatus("A conexão não foi concluída.");
+      return;
+    }
+    metaStatus("Meta autorizada. Finalizando conexão...");
+    concluirMetaCoexistencia(code);
+  },{
     config_id:META_CONFIG.configId,
-    redirect_uri:redirectUri,
     response_type:"code",
-    override_default_response_type:"true",
-    state,
-    display:"popup",
-    extras:JSON.stringify({
+    override_default_response_type:true,
+    extras:{
       setup:{},
       featureType:"whatsapp_business_app_onboarding",
       sessionInfoVersion:"3"
-    })
+    }
   });
-  metaAuthPopup=window.open("https://www.facebook.com/v25.0/dialog/oauth?"+params.toString(),"metaCoexistencia","width=620,height=760,resizable=yes,scrollbars=yes");
-  if(!metaAuthPopup){
-    metaStatus("O navegador bloqueou a janela da Meta.");
-    alert("Permita pop-ups para o Sistema Fênix e tente novamente.");
-    return;
-  }
-  metaStatus("Conclua a autorização na janela da Meta.");
 }
-
-window.addEventListener("message",function(event){
-  if(event.origin!==location.origin || event.data?.type!=="FENIX_META_OAUTH") return;
-  const expected=sessionStorage.getItem("metaOAuthState");
-  sessionStorage.removeItem("metaOAuthState");
-  if(event.data.state!==expected){
-    metaStatus("A autorização recebida não pôde ser validada.");
-    return;
-  }
-  if(event.data.error || !event.data.code){
-    metaStatus("A conexão não foi concluída.");
-    return;
-  }
-  metaStatus("Meta autorizada. Finalizando conexão...");
-  concluirMetaCoexistencia(event.data.code);
-});
 
 window.addEventListener("message",function(event){
   if(event.origin!=="https://www.facebook.com") return;
