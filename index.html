@@ -409,18 +409,20 @@ async function recoverLegacyIfDatabaseEmpty(){
   }
  }
  if(needsClasses){
-  // Reconnect legacy teacher IDs to professoras that may already have been migrated.
+  // Reconnect each legacy teacher ID directly to the existing Supabase professora.
+  // Do not depend on the temporary local IDs created while loading the current database.
+  const remoteTeachers=await sbSelect('professoras');
+  const norm=v=>String(v||'').trim().toLowerCase();
+  const digits=v=>String(v||'').replace(/\\D/g,'');
   for(const lt of legacyTeachers){
    if(remoteForLocal('professoras',lt.id))continue;
-   const current=db.teachers.find(t=>
-    (lt.cpf&&t.cpf&&String(t.cpf)===String(lt.cpf))||
-    (lt.email&&t.email&&String(t.email).toLowerCase()===String(lt.email).toLowerCase())||
-    String(t.nome||'').trim().toLowerCase()===String(lt.nome||'').trim().toLowerCase()
-   );
-   if(current){
-    const rid=remoteForLocal('professoras',current.id);
-    if(rid)rememberRemoteId('professoras',lt.id,rid);
-   }
+   const current=remoteTeachers.find(t=>{
+    const extra=t.dados_fenix||{};
+    return (digits(lt.cpf)&&digits(extra.cpf)===digits(lt.cpf))||
+      (norm(lt.email)&&norm(extra.email)===norm(lt.email))||
+      (norm(lt.nome)&&norm(t.nome)===norm(lt.nome));
+   });
+   if(current)rememberRemoteId('professoras',lt.id,current.id);
   }
   db.classes=clone(legacyClasses);
   for(const row of db.classes){
