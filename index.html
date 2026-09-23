@@ -382,6 +382,19 @@ async function loadSupabaseDb(){
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
 }
+async function recoverLegacyIfDatabaseEmpty(){
+ if(session?.tipo!=='admin')return false;
+ const collections=Object.keys(COLLECTIONS);
+ if(collections.some(k=>(db[k]||[]).length))return false;
+ const legacy=safeRead(KEY,null);
+ if(!legacy||typeof legacy!=='object'||!collections.some(k=>Array.isArray(legacy[k])&&legacy[k].length))return false;
+ const recovered=clone(DEFAULT);
+ for(const k of collections)recovered[k]=Array.isArray(legacy[k])?clone(legacy[k]):[];
+ db=recovered;
+ await syncChangedData();
+ await loadSupabaseDb();
+ return true;
+}
 function cleanExtra(row){const result=clone(row);for(const k of ['id','_version','senha','password','access_token','refresh_token','_tipo'])delete result[k];return result;}
 async function saveRecord(collection,row){
  const table=COLLECTIONS[collection];if(!table)throw new Error('Tipo de registro inválido.');
@@ -498,6 +511,7 @@ async function renderLogin(){
       const cached=safeRead(KEY+':'+cacheOwner,null);
       remoteIds=cached?.remoteIds||{};
       await loadSupabaseDb();
+      await recoverLegacyIfDatabaseEmpty();
       if(session.tipo==='teacher'&&!db.teachers.some(t=>remoteForLocal('professoras',t.id)===session.teacherId&&t.acessoAtivo))throw new Error('O cadastro da professora está desativado ou sem vínculo.');
       if(cached?.pending){
         // Keep the pending version for explicit, reviewed recovery. Never silently merge stale rows.
