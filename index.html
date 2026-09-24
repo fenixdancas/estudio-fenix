@@ -303,9 +303,15 @@ function configReady(){
 function initSupabase(){
   if(typeof window.supabase === "undefined") return false;
   if(SUPABASE_CONFIG.url.startsWith("COLE_") || SUPABASE_CONFIG.anonKey.startsWith("COLE_")) return false;
+  const inviteRedirect=new URLSearchParams(location.hash.slice(1)).get('type')==='invite';
+  let inviteHandled=false;
   supabaseClient=window.supabase.createClient(SUPABASE_CONFIG.url,SUPABASE_CONFIG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   supabaseReady=true;
-  supabaseClient.auth.onAuthStateChange?.((event)=>{if(event==='PASSWORD_RECOVERY')queueMicrotask(showPasswordRecovery);});
+  supabaseClient.auth.onAuthStateChange?.((event)=>{
+    if(event==='PASSWORD_RECOVERY'||(event==='SIGNED_IN'&&inviteRedirect&&!inviteHandled)){
+      inviteHandled=true;queueMicrotask(showPasswordRecovery);
+    }
+  });
   return true;
 }
 
@@ -429,7 +435,14 @@ async function saveRecord(collection,row){
   links={presencas:row.studentIds.map((sid,i)=>({aluna_id:remote('alunas',sid),status:row.status[i]==='Presente'?'presente':'ausente',dados_fenix:{status:row.status[i]}}))};
  }
  fields.dados_fenix=session.tipo==='teacher'&&collection==='students'?{obs:row.obs||''}:cleanExtra(row);
- const {data,error}=await supabaseClient.rpc('fenix_salvar_registro',{p_tabela:table,p_id:id,p_dados:fields,p_versao:Number(row._version||0),p_vinculos:links});
+ let rpc='fenix_salvar_registro', params={p_tabela:table,p_id:id,p_dados:fields,p_versao:Number(row._version||0),p_vinculos:links};
+ if(session.tipo==='teacher'&&collection==='students'){
+  rpc='fenix_salvar_observacao_professora';params={p_id:id,p_obs:row.obs||'',p_versao:Number(row._version||0)};
+ }
+ if(session.tipo==='teacher'&&collection==='attendance'){
+  rpc='fenix_salvar_aula_professora';params={p_id:id,p_turma:fields.turma_id,p_data:fields.data,p_versao:Number(row._version||0),p_presencas:links.presencas,p_dados:fields.dados_fenix};
+ }
+ const {data,error}=await supabaseClient.rpc(rpc,params);
  if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':error.message);
  if(!data||data.id!==id||!Number.isInteger(data.fenix_version))throw new Error('O banco não confirmou o salvamento.');
  row._version=data.fenix_version;
