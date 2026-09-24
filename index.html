@@ -785,7 +785,7 @@ function irEtapa(id){
 
 function novaMatricula(id){
  requireAdmin();
- let s=db.students.find(x=>x.id==id)||{nome:"",nasc:"",cpf:"",fone:"",email:"",endereco:"",numero:"",complemento:"",profissao:"",respNome:"",respCpf:"",respParentesco:"",respFone:"",emergNome:"",emergParentesco:"",emergFone:"",experiencia:"",modalidadeAnterior:"",tempoDanca:"",tempoParou:"",objetivos:[],outroObjetivo:"",tabagismo:"",alergias:"",cirurgias:"",fobias:"",fobiaDetalhe:"",fisicas:[],respiratorias:[],autoimunes:[],psicologicas:[],saudeObs:"",obs:"",mensalidade:150,diaVenc:"10",forma:"Pix",checkin:"Nenhum",turmaId:"",contratoAceito:false,contratoAceitoEm:""};
+ let s=db.students.find(x=>x.id==id)||{nome:"",nasc:"",cpf:"",fone:"",email:"",endereco:"",numero:"",complemento:"",profissao:"",respNome:"",respCpf:"",respParentesco:"",respFone:"",emergNome:"",emergParentesco:"",emergFone:"",experiencia:"",modalidadeAnterior:"",tempoDanca:"",tempoParou:"",objetivos:[],outroObjetivo:"",tabagismo:"",alergias:"",alergiaDetalhe:"",cirurgias:"",cirurgiaDetalhe:"",fobias:"",fobiaDetalhe:"",fisicas:[],respiratorias:[],autoimunes:[],psicologicas:[],saudeObs:"",obs:"",mensalidade:150,diaVenc:"10",forma:"Pix",checkin:"Nenhum",turmaId:"",contratoAceito:false,contratoAceitoEm:""};
  const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}" ${String(sel)===String(x)?"selected":""}>${esc(x)}</option>`).join("");
  const turmaIds=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);
  const modalidades=["Ballet","Dança do Ventre","Jazz"], dias=["10","20","30","VIP"], formas=["Pix","Débito","Dinheiro"], checkins=["Nenhum","Wellhub","TotalPass"];
@@ -840,8 +840,12 @@ function novaMatricula(id){
 
  <div id="etapa4" class="full section-title">⑦ Ficha de saúde</div>
  <div class="field"><label>Tabagismo</label><div class="actions">${yesno("tabagismo",s.tabagismo)}</div></div>
- <div class="field"><label>Alergias</label><div class="actions">${yesno("alergias",s.alergias)}</div></div>
- <div class="field"><label>Cirurgias</label><div class="actions">${yesno("cirurgias",s.cirurgias)}</div></div>
+ <div class="field"><label>Alergias</label><div class="actions">${yesno("alergias",s.alergias)}</div>
+ <input id="alergiaDetalhe" name="alergiaDetalhe" value="${esc(s.alergiaDetalhe||"")}" placeholder="Qual alergia?" style="margin-top:8px;${s.alergias==="Sim"?"":"display:none"}">
+ </div>
+ <div class="field"><label>Cirurgias</label><div class="actions">${yesno("cirurgias",s.cirurgias)}</div>
+ <input id="cirurgiaDetalhe" name="cirurgiaDetalhe" value="${esc(s.cirurgiaDetalhe||"")}" placeholder="Qual cirurgia?" style="margin-top:8px;${s.cirurgias==="Sim"?"":"display:none"}">
+ </div>
  <div class="field"><label>Fobias</label><div class="actions">${yesno("fobias",s.fobias)}</div>
  <input id="fobiaDetalhe" name="fobiaDetalhe" value="${esc(s.fobiaDetalhe||"")}" placeholder="Qual fobia?" style="margin-top:8px;${s.fobias==="Sim"?"":"display:none"}">
  </div>
@@ -860,6 +864,8 @@ function novaMatricula(id){
  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar matrícula</button></div>
  </form>`);
  document.getElementById("studentPhoto").onchange=e=>previewPhoto(e,"studentPhotoPreview");
+ document.querySelectorAll('input[name="alergias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("alergiaDetalhe");if(d)d.style.display=document.querySelector('input[name="alergias"]:checked')?.value==="Sim"?"":"none"});
+ document.querySelectorAll('input[name="cirurgias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("cirurgiaDetalhe");if(d)d.style.display=document.querySelector('input[name="cirurgias"]:checked')?.value==="Sim"?"":"none"});
  document.querySelectorAll('input[name="fobias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("fobiaDetalhe");if(d)d.style.display=document.querySelector('input[name="fobias"]:checked')?.value==="Sim"?"":"none"});
  document.getElementById("studentForm").onsubmit=async e=>{e.preventDefault();await saveAluno(e,id)};
 }
