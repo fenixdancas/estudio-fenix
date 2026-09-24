@@ -177,7 +177,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <main class="main">
     <header class="top">
       <div class="top-left"><span class="quote">Arte em movimento, vida em evolução.</span></div>
-      <div class="top-right"><span id="today"></span><div class="user-pill"><div id="avatar" class="avatar">N</div><span id="loggedName"></span></div></div>
+      <div class="top-right"><span id="today"></span><button id="teacherModeBtn" class="btn" type="button" style="display:none">Modo Professora</button><div class="user-pill"><div id="avatar" class="avatar">N</div><span id="loggedName"></span></div></div>
     </header>
     <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div>
     <section id="page" class="page"></section>
@@ -633,7 +633,15 @@ startFenix();
 
 async function start(){
   document.getElementById("loginScreen").style.display="none";document.getElementById("app").style.display="block";
-  document.getElementById("loggedName").textContent=session.nome;document.getElementById("avatar").textContent=session.nome[0].toUpperCase();document.getElementById("today").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});applyAccess();render();
+  document.getElementById("loggedName").textContent=session.nome;document.getElementById("avatar").textContent=session.nome[0].toUpperCase();document.getElementById("today").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
+  session.teacherView=false;
+  const teacherModeBtn=document.getElementById("teacherModeBtn");
+  if(session.tipo==="admin"){
+    teacherModeBtn.style.display="";
+    teacherModeBtn.textContent="Modo Professora";
+    teacherModeBtn.onclick=()=>{session.teacherView=!session.teacherView;teacherModeBtn.textContent=session.teacherView?"Modo Administradora":"Modo Professora";if(session.teacherView&&view!=="alunos")view="alunos";applyAccess();render();};
+  }else teacherModeBtn.style.display="none";
+  applyAccess();render();
   document.querySelectorAll(".nav button[data-view]").forEach(button=>{
     button.onclick=()=>go(button.dataset.view);
   });
@@ -888,7 +896,7 @@ async function saveAluno(e,id){
  log(id?"Matrícula atualizada":"Nova matrícula",o.nome);await save();closeM();render();visualizarContrato(o.id);
 }
 function abrirAluno(id){
- if(session?.tipo!=="teacher"){novaMatricula(id);return}
+ if(session?.tipo!=="teacher"&&!session?.teacherView){novaMatricula(id);return}
  const s=db.students.find(x=>x.id==id); if(!s)return;
  const turmaIds=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);
  const cs=turmaIds.map(id=>db.classes.find(x=>x.id==id)).filter(Boolean);
