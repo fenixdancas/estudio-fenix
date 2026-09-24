@@ -894,7 +894,18 @@ function abrirAluno(id){
  const cs=turmaIds.map(id=>db.classes.find(x=>x.id==id)).filter(Boolean);
  if(session?.tipo==="teacher" && !cs.some(c=>teacherOwnsClass(c))){alert("Esta aluna não pertence a uma turma desta professora.");return}
  const turmasTexto=cs.map(c=>`${esc(c.nome)} · ${esc(c.dia)} ${esc(c.hora)}`).join("<br>")||"—";
- openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p></div><div class="panel"><h2>Ficha de saúde</h2><p><strong>Tabagismo:</strong> ${esc(s.tabagismo||"—")} · <strong>Alergias:</strong> ${esc(s.alergias||"—")} · <strong>Cirurgias:</strong> ${esc(s.cirurgias||"—")} · <strong>Fobias:</strong> ${esc(s.fobias||"—")}</p><p><strong>Físicas:</strong> ${esc((s.fisicas||[]).join(", ")||"—")}</p><p><strong>Respiratórias:</strong> ${esc((s.respiratorias||[]).join(", ")||"—")}</p><p><strong>Autoimunes:</strong> ${esc((s.autoimunes||[]).join(", ")||"—")}</p><p><strong>Psicológicas:</strong> ${esc((s.psicologicas||[]).join(", ")||"—")}</p><p><strong>Observações de saúde:</strong> ${esc(s.saudeObs||"—")}</p></div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
+ const saudeItens=[];
+ if(s.tabagismo==="Sim")saudeItens.push("<p><strong>Tabagismo:</strong> Sim</p>");
+ if(s.alergias==="Sim")saudeItens.push(`<p><strong>Alergias:</strong> ${esc(s.alergiaDetalhe||"Sim")}</p>`);
+ if(s.cirurgias==="Sim")saudeItens.push(`<p><strong>Cirurgias:</strong> ${esc(s.cirurgiaDetalhe||"Sim")}</p>`);
+ if(s.fobias==="Sim")saudeItens.push(`<p><strong>Fobias:</strong> ${esc(s.fobiaDetalhe||"Sim")}</p>`);
+ if((s.fisicas||[]).length)saudeItens.push(`<p><strong>Físicas:</strong> ${esc(s.fisicas.join(", "))}</p>`);
+ if((s.respiratorias||[]).length)saudeItens.push(`<p><strong>Respiratórias:</strong> ${esc(s.respiratorias.join(", "))}</p>`);
+ if((s.autoimunes||[]).length)saudeItens.push(`<p><strong>Autoimunes:</strong> ${esc(s.autoimunes.join(", "))}</p>`);
+ if((s.psicologicas||[]).length)saudeItens.push(`<p><strong>Psicológicas:</strong> ${esc(s.psicologicas.join(", "))}</p>`);
+ if(String(s.saudeObs||"").trim())saudeItens.push(`<p><strong>Observações de saúde:</strong> ${esc(s.saudeObs)}</p>`);
+ const saudeHtml=saudeItens.join("")||'<p class="muted">Nenhuma condição de saúde informada.</p>';
+ openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p></div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
 }
 async function salvarObsProf(id){const s=db.students.find(x=>x.id==id);if(!s)return;const v=document.getElementById("teacherObs").value;s.obs=v;await save();log("Observação da aluna atualizada",s.nome);closeM();alert("Observação salva.")}
 
