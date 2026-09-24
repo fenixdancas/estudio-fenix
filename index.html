@@ -800,7 +800,7 @@ function novaMatricula(id){
  <div class="field"><label>Nº da matrícula</label><input name="numeroMatricula" value="${esc(s.numeroMatricula||"Será gerado automaticamente")}" readonly></div>
  <div class="field full"><label>Modalidades * <span class="small muted">Selecione todas as modalidades que a aluna faz.</span></label><div class="modalidades-grid">${modalidades.map(m=>`<label class="modalidade-check"><input type="checkbox" name="modalidades" value="${esc(m)}" ${(Array.isArray(s.modalidades)?s.modalidades:(s.modalidade?[s.modalidade]:[])).includes(m)?"checked":""}> ${esc(m)}</label>`).join("")}</div></div>
  <div class="field full"><label>Turmas * <span class="small muted">Uma aluna pode pertencer a várias turmas, inclusive com professoras diferentes.</span></label><div class="turmas-multi">${db.classes.map(c=>`<label class="turma-check"><input type="checkbox" name="turmaIds" value="${c.id}" ${turmaIds.map(String).includes(String(c.id))?"checked":""}> ${esc(c.nome)} · ${esc(c.modalidade)} · ${esc(c.dia)} ${esc(c.hora)}</label>`).join("")||'<span class="small muted">Cadastre uma turma primeiro.</span>'}</div></div>
- <div class="field"><label>Valor da matrícula *</label><select name="valorMatricula"><option value="150" ${String(s.valorMatricula??"150")==="150"?"selected":""}>R$ 150,00</option><option value="VIP" ${s.valorMatricula==="VIP"?"selected":""}>VIP</option></select></div>\n <div class="field"><label>Mensalidade (R$) *</label><input type="number" step=".01" min="0" name="mensalidade" value="${esc(s.mensalidade??"")}" required></div>
+ <div class="field"><label>Valor da matrícula *</label><select name="valorMatricula"><option value="150" ${String(s.valorMatricula??"150")==="150"?"selected":""}>R$ 150,00</option><option value="VIP" ${s.valorMatricula==="VIP"?"selected":""}>VIP</option></select></div>\n <div class="field"><label>Mensalidade *</label><div class="actions"><input id="mensalidadeValor" type="number" step=".01" min="0" name="mensalidade" value="${esc(s.mensalidade==="VIP"?"":(s.mensalidade??""))}" ${s.mensalidade==="VIP"?"disabled":""} required><label class="check"><input type="checkbox" id="mensalidadeVip" name="mensalidadeVip" value="VIP" ${s.mensalidade==="VIP"?"checked":""}> VIP</label></div></div>
  <div class="field"><label>Dia de vencimento *</label><select name="diaVenc">${opts(dias,s.diaVenc)}</select></div>
  <div class="field"><label>Forma de pagamento</label><select name="forma">${opts(formas,s.forma)}</select></div>
  <div class="field"><label>Check-in</label><select name="checkin">${opts(checkins,s.checkin)}</select></div>
@@ -864,6 +864,8 @@ function novaMatricula(id){
  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar matrícula</button></div>
  </form>`);
  document.getElementById("studentPhoto").onchange=e=>previewPhoto(e,"studentPhotoPreview");
+ const mensalidadeVip=document.getElementById("mensalidadeVip"),mensalidadeValor=document.getElementById("mensalidadeValor");
+ if(mensalidadeVip&&mensalidadeValor)mensalidadeVip.onchange=()=>{mensalidadeValor.disabled=mensalidadeVip.checked;if(mensalidadeVip.checked)mensalidadeValor.value="";};
  document.querySelectorAll('input[name="alergias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("alergiaDetalhe");if(d)d.style.display=document.querySelector('input[name="alergias"]:checked')?.value==="Sim"?"":"none"});
  document.querySelectorAll('input[name="cirurgias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("cirurgiaDetalhe");if(d)d.style.display=document.querySelector('input[name="cirurgias"]:checked')?.value==="Sim"?"":"none"});
  document.querySelectorAll('input[name="fobias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("fobiaDetalhe");if(d)d.style.display=document.querySelector('input[name="fobias"]:checked')?.value==="Sim"?"":"none"});
@@ -881,7 +883,7 @@ async function saveAluno(e,id){
  o.turmaId=o.turmaIds[0]||"";
  if(!o.modalidades.length){alert("Selecione pelo menos uma modalidade.");return;}
  if(!o.turmaIds.length){alert("Selecione pelo menos uma turma.");return;}
- o.mensalidade=Number(o.mensalidade||0);o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||""):"MAT-"+String(o.id);
+ o.mensalidade=fd.get("mensalidadeVip")==="VIP"?"VIP":Number(o.mensalidade||0);delete o.mensalidadeVip;o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||""):"MAT-"+String(o.id);
  if(id) Object.assign(db.students.find(s=>s.id==id),o); else {const draft=db.students.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.students.push(o);}
  log(id?"Matrícula atualizada":"Nova matrícula",o.nome);await save();closeM();render();visualizarContrato(o.id);
 }
