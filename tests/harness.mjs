@@ -25,10 +25,12 @@ export function fakeClient(tables=fixtures()){
   }};return q;
  },
  async rpc(name,p){calls.push({type:'rpc',name,p:structuredClone(p)});if(failure)return {error:failure};
-  if(name!=='fenix_salvar_registro')return {data:true};
+  if(name==='fenix_salvar_observacao_professora')p={p_tabela:'alunas',p_id:p.p_id,p_versao:p.p_versao,p_dados:{dados_fenix:{obs:p.p_obs}}};
+  else if(name==='fenix_salvar_aula_professora')p={p_tabela:'aulas',p_id:p.p_id,p_versao:p.p_versao,p_dados:{turma_id:p.p_turma,data:p.p_data,dados_fenix:p.p_dados},p_vinculos:{presencas:p.p_presencas}};
+  else if(name!=='fenix_salvar_registro')return {data:true};
   const rows=tables[p.p_tabela];let row=rows.find(r=>r.id===p.p_id);
   if(row&&Number(row.fenix_version||0)!==p.p_versao)return {error:{code:'40001',message:'Conflito de versão'}};
-  if(!row){row={id:p.p_id};rows.push(row);}Object.assign(row,structuredClone(p.p_dados),{fenix_version:p.p_versao+1});
+  if(!row){row={id:p.p_id};rows.push(row);}if(name==='fenix_salvar_observacao_professora')p.p_dados.dados_fenix={...row.dados_fenix,...p.p_dados.dados_fenix};Object.assign(row,structuredClone(p.p_dados),{fenix_version:p.p_versao+1});
   if(p.p_vinculos?.presencas)for(const record of p.p_vinculos.presencas){let old=tables.presencas.find(r=>r.aula_id===row.id&&r.aluna_id===record.aluna_id);if(old)Object.assign(old,record);else tables.presencas.push({id:webcrypto.randomUUID(),aula_id:row.id,...record});}
   return {data:{id:row.id,fenix_version:row.fenix_version}};
  }};return client;
