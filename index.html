@@ -815,6 +815,11 @@ function novaMatricula(id){
  <div class="field"><label>Dia de vencimento *</label><select name="diaVenc">${opts(dias,s.diaVenc)}</select></div>
  <div class="field"><label>Forma de pagamento</label><select name="forma">${opts(formas,s.forma)}</select></div>
  <div class="field"><label>Check-in</label><select name="checkin">${opts(checkins,s.checkin)}</select></div>
+ <div class="field"><label>Status da matrícula</label><select id="studentStatus" name="status"><option value="ativo" ${s.status!=="inativo"?"selected":""}>Ativa</option><option value="inativo" ${s.status==="inativo"?"selected":""}>Inativa</option></select></div>
+ <div id="desligamentoCampos" class="field full" style="${s.status==="inativo"?"":"display:none"}"><div class="form-grid">
+   <div class="field"><label>Data do desligamento *</label><input type="date" id="dataDesligamento" name="dataDesligamento" value="${esc(s.dataDesligamento||"")}"></div>
+   <div class="field"><label>Motivo da saída *</label><input id="motivoSaida" name="motivoSaida" value="${esc(s.motivoSaida||"")}" placeholder="Informe o motivo"></div>
+ </div></div>
 
  <div id="etapa2" class="full section-title">② Dados pessoais da aluna</div>
  <div class="field full"><label>Nome completo *</label><input name="nome" value="${esc(s.nome)}" required></div>
@@ -875,6 +880,9 @@ function novaMatricula(id){
  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar matrícula</button></div>
  </form>`);
  document.getElementById("studentPhoto").onchange=e=>previewPhoto(e,"studentPhotoPreview");
+ const studentStatus=document.getElementById("studentStatus"),desligamentoCampos=document.getElementById("desligamentoCampos"),dataDesligamento=document.getElementById("dataDesligamento"),motivoSaida=document.getElementById("motivoSaida");
+ const syncDesligamento=()=>{const off=studentStatus?.value==="inativo";if(desligamentoCampos)desligamentoCampos.style.display=off?"":"none";if(dataDesligamento){dataDesligamento.required=off;if(off&&!dataDesligamento.value)dataDesligamento.value=nowISO();}if(motivoSaida)motivoSaida.required=off;};
+ if(studentStatus){studentStatus.onchange=syncDesligamento;syncDesligamento();}
  const mensalidadeVip=document.getElementById("mensalidadeVip"),mensalidadeValor=document.getElementById("mensalidadeValor");
  if(mensalidadeVip&&mensalidadeValor)mensalidadeVip.onchange=()=>{mensalidadeValor.disabled=mensalidadeVip.checked;if(mensalidadeVip.checked)mensalidadeValor.value="";};
  document.querySelectorAll('input[name="alergias"]').forEach(r=>r.onchange=()=>{const d=document.getElementById("alergiaDetalhe");if(d)d.style.display=document.querySelector('input[name="alergias"]:checked')?.value==="Sim"?"":"none"});
@@ -894,9 +902,11 @@ async function saveAluno(e,id){
  o.turmaId=o.turmaIds[0]||"";
  if(!o.modalidades.length){alert("Selecione pelo menos uma modalidade.");return;}
  if(!o.turmaIds.length){alert("Selecione pelo menos uma turma.");return;}
- o.mensalidade=fd.get("mensalidadeVip")==="VIP"?"VIP":Number(o.mensalidade||0);delete o.mensalidadeVip;o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(e.currentTarget.dataset.draftId||document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||o.numeroMatricula||""):(o.numeroMatricula||"MAT-"+String(o.id));
+ o.mensalidade=fd.get("mensalidadeVip")==="VIP"?"VIP":Number(o.mensalidade||0);delete o.mensalidadeVip;
+ const statusAnterior=old?.status||"ativo";
+ if(o.status!=="inativo"){o.status="ativo";o.dataDesligamento="";o.motivoSaida="";}o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(e.currentTarget.dataset.draftId||document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||o.numeroMatricula||""):(o.numeroMatricula||"MAT-"+String(o.id));
  if(id) Object.assign(db.students.find(s=>s.id==id),o); else {const draft=db.students.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.students.push(o);}
- log(id?"Matrícula atualizada":"Nova matrícula",o.nome);await save();closeM();render();visualizarContrato(o.id);
+ if(id&&statusAnterior!=="inativo"&&o.status==="inativo")log("Matrícula inativada",o.nome+" · "+o.numeroMatricula+" · "+o.dataDesligamento+" · "+o.motivoSaida);else if(id&&statusAnterior==="inativo"&&o.status==="ativo")log("Matrícula reativada",o.nome+" · "+o.numeroMatricula);else log(id?"Matrícula atualizada":"Nova matrícula",o.nome);await save();closeM();render();visualizarContrato(o.id);
 }
 function abrirAluno(id){
  if(session?.tipo!=="teacher"&&!session?.teacherView){novaMatricula(id);return}
