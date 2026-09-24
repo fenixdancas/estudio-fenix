@@ -772,7 +772,7 @@ function novaMatricula(id){
  let s=db.students.find(x=>x.id==id)||{nome:"",nasc:"",cpf:"",fone:"",email:"",endereco:"",numero:"",complemento:"",profissao:"",respNome:"",respCpf:"",respParentesco:"",respFone:"",emergNome:"",emergParentesco:"",emergFone:"",experiencia:"",modalidadeAnterior:"",tempoDanca:"",tempoParou:"",objetivos:[],outroObjetivo:"",tabagismo:"",alergias:"",cirurgias:"",fobias:"",fobiaDetalhe:"",fisicas:[],respiratorias:[],autoimunes:[],psicologicas:[],saudeObs:"",obs:"",mensalidade:150,diaVenc:"10",forma:"Pix",checkin:"Nenhum",turmaId:"",contratoAceito:false,contratoAceitoEm:""};
  const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}" ${String(sel)===String(x)?"selected":""}>${esc(x)}</option>`).join("");
  const turmaIds=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);
- const modalidades=["Ballet","Dança do Ventre","Jazz"], dias=["10","20","30"], formas=["Pix","Débito","Dinheiro"], checkins=["Nenhum","Wellhub","TotalPass"];
+ const modalidades=["Ballet","Dança do Ventre","Jazz"], dias=["10","20","30","VIP"], formas=["Pix","Débito","Dinheiro"], checkins=["Nenhum","Wellhub","TotalPass"];
  const objetivo=["Aprender dança","Condicionamento físico","Socialização","Terapêutico","Indicação médica","Profissionalização","Perda de peso","Lazer"];
  const yesno=(name,val)=>`<label><input type="radio" name="${name}" value="Sim" ${val==="Sim"?"checked":""}> Sim</label><label><input type="radio" name="${name}" value="Não" ${val==="Não"?"checked":""}> Não</label>`;
  const ch=(name,list)=>list.map(x=>`<label class="check"><input type="checkbox" name="${name}" value="${esc(x)}" ${s[name]?.includes(x)?"checked":""}> ${esc(x)}</label>`).join("");
