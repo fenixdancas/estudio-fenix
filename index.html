@@ -1053,7 +1053,7 @@ async function callFenixAppsScript(action,payload={}){
  const token=data?.session?.access_token;if(error||!token)throw new Error("Sessão expirada.");
  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),30000);
  try{
-  const body=new URLSearchParams({...payload,access_token:token,action});
+  const body=new URLSearchParams({...payload,access_token:token,supabase_key:SUPABASE_CONFIG.anonKey,action});
   const response=await fetch(SUPABASE_CONFIG.appsScriptUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},body,signal:controller.signal});
   if(!response.ok)throw new Error("O serviço retornou erro HTTP "+response.status+". O envio não foi confirmado.");
   let result;try{result=await response.json();}catch{throw new Error("Resposta inválida do serviço. O envio não foi confirmado.");}
