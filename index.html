@@ -296,6 +296,22 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&
 let lastLocalId=0;
 const uid=()=>lastLocalId=Math.max(Date.now(),lastLocalId+1);
 const dayNames=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+const MOBILE_COMM_RULES=[
+ {nome:"Dia das Mães",month:5,weekday:0,nth:2,obs:"Segundo domingo de maio"},
+ {nome:"Dia dos Pais",month:8,weekday:0,nth:2,obs:"Segundo domingo de agosto"}
+];
+function nthWeekdayOfMonth(year,month,weekday,nth){
+ const first=new Date(year,month-1,1),delta=(weekday-first.getDay()+7)%7,day=1+delta+(nth-1)*7;
+ return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+}
+function mobileCommemoratives(year){
+ return MOBILE_COMM_RULES.map(r=>({id:"mobile:"+year+":"+r.nome,data:nthWeekdayOfMonth(year,r.month,r.weekday,r.nth),nome:r.nome,obs:r.obs,mobile:true}));
+}
+function commemorativesForYear(year){
+ const manual=db.commemorative.filter(c=>!c.mobile);
+ const mobile=mobileCommemoratives(year);
+ return [...manual.filter(c=>!mobile.some(m=>m.nome===c.nome&&String(c.data||"").slice(0,4)===String(year))),...mobile];
+}
 
 function configReady(){
   return !!supabaseClient &&
@@ -682,7 +698,7 @@ painel:()=>{
  const pend=db.payments.filter(p=>!p.pago).length;
  const next=new Date();next.setDate(1);next.setMonth(next.getMonth()+1);const nm=String(next.getMonth()+1).padStart(2,"0");
  const b=db.students.filter(s=>s.nasc?.slice(5,7)===nm).sort((a,b)=>a.nasc.localeCompare(b.nasc));
- const commemorativeNext=db.commemorative.filter(c=>c.data?.slice(5,7)===nm).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
+ const nextYear=next.getFullYear();const commemorativeNext=commemorativesForYear(nextYear).filter(c=>c.data?.slice(5,7)===nm).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
  const upcoming=db.expenses.filter(e=>!e.pago).sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).slice(0,5);
  return head("Painel","Visão geral do estúdio.")+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
@@ -716,7 +732,7 @@ eventos:()=>head("Eventos","Cadastre e acompanhe eventos e espetáculos do estú
  `<div class="panel"><table><tr><th>Data</th><th>Evento</th><th>Local</th><th>Status</th><th></th></tr>${db.events.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(e=>`<tr><td>${dateBR(e.data)}</td><td><strong>${esc(e.nome)}</strong></td><td>${esc(e.local||"—")}</td><td><span class="badge ${e.status==="Concluído"?"ok":"neutral"}">${esc(e.status||"Planejado")}</span></td><td><button class="btn" onclick="novoEvento(${e.id})">Abrir</button></td></tr>`).join("")||tableEmpty(5)}</table></div>`,
 aniversarios:()=>head("Aniversários e datas comemorativas","Consulte aniversários e datas comemorativas do estúdio.",`<button class="btn primary" onclick="novaComemorativa()">＋ Nova data comemorativa</button>`)+
  `<div class="panel"><h2>Aniversários cadastrados</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>s.nasc).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
- <div class="panel"><h2>Datas comemorativas</h2><table><tr><th>Data</th><th>Nome</th><th>Observação</th></tr>${db.commemorative.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(c=>`<tr><td>${dateBR(c.data)}</td><td>${esc(c.nome)}</td><td>${esc(c.obs||"—")}</td></tr>`).join("")||tableEmpty(3)}</table></div>`,
+ <div class="panel"><h2>Datas comemorativas</h2><table><tr><th>Data</th><th>Nome</th><th>Observação</th></tr>${commemorativesForYear(new Date().getFullYear()).slice().sort((a,b)=>a.data.localeCompare(b.data)).map(c=>`<tr><td>${dateBR(c.data)}</td><td>${esc(c.nome)}</td><td>${esc(c.obs||"—")}</td></tr>`).join("")||tableEmpty(3)}</table></div>`,
 busca:()=>head("Busca","Encontre rapidamente alunos, professores e turmas.")+
  `<div class="panel"><input id="globalSearch" class="search" placeholder="Digite nome, telefone ou turma"><div id="searchResults" style="margin-top:16px"></div></div>`,
 historico:()=>head("Histórico","Registro das alterações realizadas no sistema.")+
