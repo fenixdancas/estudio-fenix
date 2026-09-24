@@ -772,7 +772,7 @@ function openM(title,content){
  const modal=document.getElementById("modal"), box=document.getElementById("modalbox");
  if(!modal||!box)return;
  box.innerHTML=`<div class="modal-head"><h2>${esc(title)}</h2><button type="button" class="btn" onclick="closeM()" aria-label="Fechar">✕</button></div>${content}`;
- box.scrollTop=0;box.dataset.draftId=String(uid());box.setAttribute("role","dialog");box.setAttribute("aria-modal","true");box.setAttribute("aria-label",title);
+ box.scrollTop=0;if(!box.dataset.draftId)box.dataset.draftId=String(uid());box.setAttribute("role","dialog");box.setAttribute("aria-modal","true");box.setAttribute("aria-label",title);
  modal.classList.add("open");
  box.querySelector("button,input,select,textarea")?.focus();
 }
@@ -793,6 +793,8 @@ function irEtapa(id){
 
 function novaMatricula(id){
  requireAdmin();
+ const nova=!id;
+ const draftId=nova?uid():null;
  let s=db.students.find(x=>x.id==id)||{nome:"",nasc:"",cpf:"",fone:"",email:"",endereco:"",numero:"",complemento:"",profissao:"",respNome:"",respCpf:"",respParentesco:"",respFone:"",emergNome:"",emergParentesco:"",emergFone:"",experiencia:"",modalidadeAnterior:"",tempoDanca:"",tempoParou:"",objetivos:[],outroObjetivo:"",tabagismo:"",alergias:"",alergiaDetalhe:"",cirurgias:"",cirurgiaDetalhe:"",fobias:"",fobiaDetalhe:"",fisicas:[],respiratorias:[],autoimunes:[],psicologicas:[],saudeObs:"",obs:"",mensalidade:150,diaVenc:"10",forma:"Pix",checkin:"Nenhum",turmaId:"",contratoAceito:false,contratoAceitoEm:""};
  const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}" ${String(sel)===String(x)?"selected":""}>${esc(x)}</option>`).join("");
  const turmaIds=Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[]);
@@ -802,10 +804,10 @@ function novaMatricula(id){
  const ch=(name,list)=>list.map(x=>`<label class="check"><input type="checkbox" name="${name}" value="${esc(x)}" ${s[name]?.includes(x)?"checked":""}> ${esc(x)}</label>`).join("");
  openM(id?"Editar matrícula":"Nova matrícula",`
  <div class="stepper"><button type="button" class="step active" onclick="irEtapa('etapa1')">1 · Matrícula</button><button type="button" class="step active" onclick="irEtapa('etapa2')">2 · Dados pessoais</button><button type="button" class="step active" onclick="irEtapa('etapa3')">3 · Experiência</button><button type="button" class="step active" onclick="irEtapa('etapa4')">4 · Saúde</button><button type="button" class="step active" onclick="irEtapa('etapa5')">5 · Contrato</button></div>
- <form id="studentForm" class="form-grid">
+ <form id="studentForm" class="form-grid" data-draft-id="${draftId||id||""}">
  <div id="etapa1" class="full section-title">① Dados da matrícula</div>
  <div class="field"><label>Data da matrícula *</label><input type="date" name="dataMatricula" value="${s.dataMatricula||nowISO()}" required></div>
- <div class="field"><label>Nº da matrícula</label><input name="numeroMatricula" value="${esc(s.numeroMatricula||"Será gerado automaticamente")}" readonly></div>
+ <div class="field"><label>Nº da matrícula</label><input name="numeroMatricula" value="${esc(s.numeroMatricula||(nova?"MAT-"+String(draftId):""))}" readonly></div>
  <div class="field full"><label>Modalidades * <span class="small muted">Selecione todas as modalidades que a aluna faz.</span></label><div class="modalidades-grid">${modalidades.map(m=>`<label class="modalidade-check"><input type="checkbox" name="modalidades" value="${esc(m)}" ${(Array.isArray(s.modalidades)?s.modalidades:(s.modalidade?[s.modalidade]:[])).includes(m)?"checked":""}> ${esc(m)}</label>`).join("")}</div></div>
  <div class="field full"><label>Turmas * <span class="small muted">Uma aluna pode pertencer a várias turmas, inclusive com professoras diferentes.</span></label><div class="turmas-multi">${db.classes.map(c=>`<label class="turma-check"><input type="checkbox" name="turmaIds" value="${c.id}" ${turmaIds.map(String).includes(String(c.id))?"checked":""}> ${esc(c.nome)} · ${esc(c.modalidade)} · ${esc(c.dia)} ${esc(c.hora)}</label>`).join("")||'<span class="small muted">Cadastre uma turma primeiro.</span>'}</div></div>
  <div class="field"><label>Valor da matrícula *</label><select name="valorMatricula"><option value="150" ${String(s.valorMatricula??"150")==="150"?"selected":""}>R$ 150,00</option><option value="VIP" ${s.valorMatricula==="VIP"?"selected":""}>VIP</option></select></div>\n <div class="field"><label>Mensalidade *</label><div class="actions"><input id="mensalidadeValor" type="number" step=".01" min="0" name="mensalidade" value="${esc(s.mensalidade==="VIP"?"":(s.mensalidade??""))}" ${s.mensalidade==="VIP"?"disabled":""} required><label class="check"><input type="checkbox" id="mensalidadeVip" name="mensalidadeVip" value="VIP" ${s.mensalidade==="VIP"?"checked":""}> VIP</label></div></div>
@@ -891,7 +893,7 @@ async function saveAluno(e,id){
  o.turmaId=o.turmaIds[0]||"";
  if(!o.modalidades.length){alert("Selecione pelo menos uma modalidade.");return;}
  if(!o.turmaIds.length){alert("Selecione pelo menos uma turma.");return;}
- o.mensalidade=fd.get("mensalidadeVip")==="VIP"?"VIP":Number(o.mensalidade||0);delete o.mensalidadeVip;o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||""):"MAT-"+String(o.id);
+ o.mensalidade=fd.get("mensalidadeVip")==="VIP"?"VIP":Number(o.mensalidade||0);delete o.mensalidadeVip;o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(e.currentTarget.dataset.draftId||document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||o.numeroMatricula||""):(o.numeroMatricula||"MAT-"+String(o.id));
  if(id) Object.assign(db.students.find(s=>s.id==id),o); else {const draft=db.students.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.students.push(o);}
  log(id?"Matrícula atualizada":"Nova matrícula",o.nome);await save();closeM();render();visualizarContrato(o.id);
 }
