@@ -303,9 +303,15 @@ function configReady(){
 function initSupabase(){
   if(typeof window.supabase === "undefined") return false;
   if(SUPABASE_CONFIG.url.startsWith("COLE_") || SUPABASE_CONFIG.anonKey.startsWith("COLE_")) return false;
+  const inviteRedirect=new URLSearchParams(location.hash.slice(1)).get('type')==='invite';
+  let inviteHandled=false;
   supabaseClient=window.supabase.createClient(SUPABASE_CONFIG.url,SUPABASE_CONFIG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   supabaseReady=true;
-  supabaseClient.auth.onAuthStateChange?.((event)=>{if(event==='PASSWORD_RECOVERY')queueMicrotask(showPasswordRecovery);});
+  supabaseClient.auth.onAuthStateChange?.((event)=>{
+    if(event==='PASSWORD_RECOVERY'||(event==='SIGNED_IN'&&inviteRedirect&&!inviteHandled)){
+      inviteHandled=true;queueMicrotask(showPasswordRecovery);
+    }
+  });
   return true;
 }
 
