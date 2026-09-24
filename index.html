@@ -44,7 +44,7 @@ textarea{min-height:100px;resize:vertical}.field{margin-bottom:14px}.form-grid{d
 .btn:hover{filter:brightness(.98)} .btn.primary{background:var(--violet);color:#fff;border-color:var(--violet)}
 .btn.gold{background:#fbf1dc;border-color:#e8cf9c;color:#70440b}.btn.danger{color:var(--danger);border-color:#e8c6cd}
 
-.brand{padding:4px 8px 18px;border-bottom:1px solid rgba(255,255,255,.14);margin-bottom:12px}.brand img{width:155px;height:108px;object-fit:contain;display:block;margin:0 auto}.brand small{display:block;text-align:center;color:#e8d7eb;font-size:10px;letter-spacing:1.6px}
+.brand{padding:4px 8px 18px;border-bottom:1px solid rgba(255,255,255,.14);margin-bottom:12px}.brand img{width:185px;height:128px;object-fit:contain;display:block;margin:0 auto 6px;background:rgba(255,255,255,.94);border-radius:16px;padding:8px;box-sizing:border-box;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.16)}.brand img:hover{background:#fff}.brand small{display:block;text-align:center;color:#e8d7eb;font-size:10px;letter-spacing:1.6px}
 .nav-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#cdb7d0;margin:16px 9px 7px}
 .nav button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:#f8eff9;text-align:left;padding:11px 12px;border-radius:10px;margin:3px 0}
 .nav button:hover,.nav button.active{background:rgba(255,255,255,.13)} .ico{width:22px;text-align:center}
@@ -68,7 +68,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 .footer-note{text-align:center;color:#9b8e9e;font-size:11px;padding:10px}
 @media(max-width:900px){.login-hit-user,.login-hit-pass{font-size:14px}.login-setup{padding:22px}}
 @media(max-width:1050px){.sidebar{width:210px}.main{margin-left:210px}.cards{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:760px){.sidebar{position:relative;width:100%;height:auto}.main{margin-left:0}.nav{display:flex;overflow:auto}.nav-title{display:none}.nav button{white-space:nowrap}.brand{display:flex;align-items:center;gap:15px}.brand img{width:100px;height:70px}.top{padding:0 15px}.quote{display:none}.page{padding:16px}.form-grid,.checks{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}}
+@media(max-width:760px){.sidebar{position:relative;width:100%;height:auto}.main{margin-left:0}.nav{display:flex;overflow:auto}.nav-title{display:none}.nav button{white-space:nowrap}.brand{display:flex;align-items:center;gap:15px}.brand img{width:125px;height:88px;margin:0;padding:6px}.top{padding:0 15px}.quote{display:none}.page{padding:16px}.form-grid,.checks{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.cards{grid-template-columns:1fr}.page-head{display:block}.page-head .actions{margin-top:12px}}
 
 /* NOVA INTERFACE DE LOGIN: posições relativas à própria arte 1536x1024 */
@@ -619,6 +619,7 @@ async function start(){
     button.onclick=()=>go(button.dataset.view);
   });
   document.getElementById("logoutBtn").onclick=logout;
+  document.getElementById("sideLogo").onclick=()=>go(session?.tipo==="teacher"?"alunos":"painel");
 }
 
 async function logout(){
