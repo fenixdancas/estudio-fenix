@@ -9,7 +9,7 @@ const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(script, "O JavaScript principal não foi encontrado.");
 new Function(script);
 
-for (const file of ["logo-fenix.png", "logo-fenix-marca.png", "fenix-elemento.png"]) {
+for (const file of ["logo-fenix.png", "logo-fenix-marca.png", "fenix-elemento.png", "fe-aula-experimental.webp"]) {
   assert.ok(fs.existsSync(path.join(root, file)), `Imagem ausente: ${file}`);
   assert.ok(html.includes(file), `Imagem não referenciada: ${file}`);
 }
