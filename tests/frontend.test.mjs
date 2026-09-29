@@ -4,6 +4,42 @@ async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
 test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,1);t.close();});
 test('Save and reload preserves health, monthly amount and observations',async()=>{const t=await setup();const s=t.a.db.students[0];s.saudeObs='Nova observação';s.mensalidade=500;s.emergNome='Contato sintético';await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,500);assert.equal(t.a.db.students[0].saudeObs,'Nova observação');assert.equal(t.a.db.students[0].emergNome,'Contato sintético');assert.equal(t.a.db.students[0].alergias,'Sim');t.close();});
 test('No hardcoded tuition when source has no amount',async()=>{const t=app();delete t.client.tables.alunas[0].dados_fenix.mensalidade;await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,null);t.close();});
+test('New enrollment creates separate receivables once and does not invent VIP amounts',async()=>{
+ for(const vip of [false,true]){
+  const t=await setup();t.a.novaMatricula();const f=t.w.document.getElementById('studentForm');
+  f.elements.nome.value=vip?'VIP sintética':'Nova aluna sintética';
+  f.querySelector('input[name="modalidades"]').checked=true;
+  f.querySelector('input[name="turmaIds"]').checked=true;
+  f.elements.valorMatricula.value=vip?'VIP':'60';
+  f.elements.mensalidadeOpcao.value=vip?'VIP':'255';
+  f.elements.mensalidadeOpcao.onchange();
+  await f.onsubmit({preventDefault(){},currentTarget:f});
+  assert.equal(t.client.tables.financeiro.length,vip?0:2);
+  assert.deepEqual(t.client.tables.financeiro.map(r=>r.valor).sort((a,b)=>a-b),vip?[]:[60,255]);
+  assert.deepEqual(t.client.tables.financeiro.map(r=>r.tipo).sort(),vip?[]:['entrada','mensalidade']);
+  assert(t.client.tables.financeiro.every(r=>r.status==='em_aberto'));
+  const sid=t.a.db.students.at(-1).id;t.a.novaMatricula(sid);
+  const edit=t.w.document.getElementById('studentForm');
+  await edit.onsubmit({preventDefault(){},currentTarget:edit});
+  assert.equal(t.client.tables.financeiro.length,vip?0:2);
+  t.close();
+ }
+});
+test('Retry after finance failure does not duplicate enrollment or charges',async()=>{
+ const client=fakeClient(),rpc=client.rpc.bind(client);let failOnce=true;
+ client.rpc=async(name,p)=>{
+  if(p.p_tabela==='financeiro'&&failOnce){failOnce=false;return {error:{message:'Falha financeira simulada'}};}
+  return rpc(name,p);
+ };
+ const t=app(client);await t.a.loadSupabaseDb();t.a.novaMatricula();
+ const f=t.w.document.getElementById('studentForm');f.elements.nome.value='Aluna de teste';
+ f.querySelector('input[name="modalidades"]').checked=true;f.querySelector('input[name="turmaIds"]').checked=true;
+ await assert.rejects(f.onsubmit({preventDefault(){},currentTarget:f}),/Falha financeira simulada/);
+ assert.equal(t.client.tables.alunas.length,3);assert.equal(t.client.tables.financeiro.length,0);
+ await f.onsubmit({preventDefault(){},currentTarget:f});
+ assert.equal(t.client.tables.alunas.length,3);assert.equal(t.client.tables.financeiro.length,2);
+ t.close();
+});
 test('Load failure never replaces existing data with partial data',async()=>{const t=await setup();const previous=JSON.stringify(t.a.db);t.client.fail({table:'alunas',message:'network'});await assert.rejects(t.a.loadSupabaseDb());assert.equal(JSON.stringify(t.a.db),previous);t.close();});
 test('Failed write stays pending, no false success',async()=>{const t=await setup();t.a.db.students[0].obs='Pendente';t.client.fail({message:'RLS denied'});await assert.rejects(t.a.save());assert.equal(t.a.pending,true);assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);t.client.fail(null);await t.a.save();assert.equal(t.a.pending,false);t.close();});
 test('Unchanged rows are not rewritten',async()=>{const t=await setup();await t.a.save();assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,0);t.close();});
