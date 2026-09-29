@@ -179,7 +179,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="top-left"><span class="quote">Arte em movimento, vida em evolução.</span></div>
       <div class="top-right"><span id="today"></span><button id="teacherModeBtn" class="btn" type="button" style="display:none">Modo Professora</button><div class="user-pill"><div id="avatar" class="avatar">N</div><span id="loggedName"></span></div></div>
     </header>
-    <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div>
+    <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div><button id="refreshDataBtn" class="btn" type="button" onclick="refreshSharedData()" title="Carregar cadastros feitos em outros aparelhos">Atualizar dados</button>
     <section id="page" class="page"></section>
     <div class="footer-note">Estúdio de Danças Fênix • sistema compartilhado do estúdio</div>
   </main>
@@ -338,6 +338,7 @@ function initSupabase(){
 // Persistence contract v1. Writes require the reviewed Supabase migration.
 const COLLECTIONS={teachers:'professoras',classes:'turmas',students:'alunas',payments:'financeiro',expenses:'financeiro',events:'eventos',commemorative:'datas_comemorativas',attendance:'aulas'};
 let baseline={}, syncPromise=null, dataLoaded=false, cacheOwner=null;
+let refreshPromise=null;
 const clone=x=>JSON.parse(JSON.stringify(x));
 function setSaveStatus(text,kind='pending'){
  const e=document.getElementById('saveStatus');if(e){e.textContent=text;e.className='save-status '+kind;}
@@ -417,6 +418,26 @@ async function loadSupabaseDb(){
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
 }
+async function refreshSharedData({automatic=false}={}){
+ if(!session||!dataLoaded||refreshPromise||syncPromise)return;
+ if(hasPendingChanges()){
+  if(!automatic)setSaveStatus('Há alterações pendentes. Salve antes de atualizar.','bad');
+  return;
+ }
+ if(document.getElementById('modal')?.classList.contains('open')){
+  if(!automatic)setSaveStatus('Feche a ficha antes de atualizar os dados.','pending');
+  return;
+ }
+ if(automatic&&document.hidden)return;
+ refreshPromise=(async()=>{
+  setSaveStatus('Atualizando dados…');
+  try{await loadSupabaseDb();render();}
+  catch(err){setSaveStatus('Não foi possível atualizar: '+err.message,'bad');}
+ })().finally(()=>{refreshPromise=null;});
+ return refreshPromise;
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshSharedData({automatic:true});});
+setInterval(()=>refreshSharedData({automatic:true}),60000);
 function cleanExtra(row){const result=clone(row);for(const k of ['id','_version','senha','password','access_token','refresh_token','_tipo'])delete result[k];return result;}
 async function saveRecord(collection,row){
  const table=COLLECTIONS[collection];if(!table)throw new Error('Tipo de registro inválido.');
@@ -646,7 +667,8 @@ async function start(){
     teacherModeBtn.textContent="Modo Professora";
     teacherModeBtn.onclick=()=>{session.teacherView=!session.teacherView;teacherModeBtn.textContent=session.teacherView?"Modo Administradora":"Modo Professora";if(session.teacherView&&view!=="alunos")view="alunos";applyAccess();render();};
   }else teacherModeBtn.style.display="none";
-  applyAccess();render();
+ applyAccess();render();
+ document.getElementById('refreshDataBtn').style.display='';
   document.querySelectorAll(".nav button[data-view]").forEach(button=>{
     button.onclick=()=>go(button.dataset.view);
   });
@@ -662,6 +684,7 @@ async function logout(){
   sessionStorage.removeItem("fenix_session");
   document.getElementById("app").style.display="none";
   document.getElementById("loginScreen").style.display="grid";
+  document.getElementById('refreshDataBtn').style.display='none';
   await renderLogin();
 }
 
@@ -931,7 +954,7 @@ function abrirAluno(id){
  if((s.psicologicas||[]).length)saudeItens.push(`<p><strong>Psicológicas:</strong> ${esc(s.psicologicas.join(", "))}</p>`);
  if(String(s.saudeObs||"").trim())saudeItens.push(`<p><strong>Observações de saúde:</strong> ${esc(s.saudeObs)}</p>`);
  const saudeHtml=saudeItens.join("")||'<p class="muted">Nenhuma condição de saúde informada.</p>';
- openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p></div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
+ openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p>${session?.tipo==='admin'?`<button class="btn" onclick="novaMatricula(${s.id})">Editar matrícula</button>`:''}</div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
 }
 async function salvarObsProf(id){const s=db.students.find(x=>x.id==id);if(!s)return;const v=document.getElementById("teacherObs").value;s.obs=v;await save();log("Observação da aluna atualizada",s.nome);closeM();alert("Observação salva.")}
 
