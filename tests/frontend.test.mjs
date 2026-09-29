@@ -40,6 +40,17 @@ test('Retry after finance failure does not duplicate enrollment or charges',asyn
  assert.equal(t.client.tables.alunas.length,3);assert.equal(t.client.tables.financeiro.length,2);
  t.close();
 });
+test('Existing enrollments can generate missing receivables without duplicates',async()=>{
+ const t=await setup();
+ t.a.db.students[0].dataMatricula='2026-09-29';t.a.db.students[0].valorMatricula='150';
+ t.a.db.students[1].dataMatricula='2026-09-29';t.a.db.students[1].mensalidade='VIP';t.a.db.students[1].valorMatricula='VIP';
+ await t.a.save();
+ await t.w.eval('gerarCobrancasExistentes()');
+ assert.deepEqual(t.client.tables.financeiro.map(r=>r.valor).sort((a,b)=>a-b),[60,255]);
+ await t.w.eval('gerarCobrancasExistentes()');
+ assert.equal(t.client.tables.financeiro.length,2);
+ t.close();
+});
 test('Load failure never replaces existing data with partial data',async()=>{const t=await setup();const previous=JSON.stringify(t.a.db);t.client.fail({table:'alunas',message:'network'});await assert.rejects(t.a.loadSupabaseDb());assert.equal(JSON.stringify(t.a.db),previous);t.close();});
 test('Failed write stays pending, no false success',async()=>{const t=await setup();t.a.db.students[0].obs='Pendente';t.client.fail({message:'RLS denied'});await assert.rejects(t.a.save());assert.equal(t.a.pending,true);assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);t.client.fail(null);await t.a.save();assert.equal(t.a.pending,false);t.close();});
 test('Unchanged rows are not rewritten',async()=>{const t=await setup();await t.a.save();assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,0);t.close();});
