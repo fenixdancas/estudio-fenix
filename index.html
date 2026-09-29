@@ -622,12 +622,22 @@ async function startContractAcceptance(){
     document.getElementById("contractAcceptanceBox").innerHTML="<p>O sistema de contratos não está configurado.</p>";
     return true;
   }
-  const {data,error}=await supabaseClient.from("contratos").select("id,conteudo,status").eq("token_aceite",token).in("status",["pendente","enviado"]).maybeSingle();
-  if(error||!data){
-    document.getElementById("contractAcceptanceBox").innerHTML="<p>Este link de contrato é inválido, expirou ou já foi utilizado.</p>";
+  let data,error;
+  try{const response=await supabaseClient.rpc("fenix_consultar_contrato",{p_token:token.trim()});data=response.data;error=response.error;}
+  catch{error=true;}
+  if(error){
+    document.getElementById("contractAcceptanceBox").innerHTML="<p>Não foi possível carregar o contrato agora. Tente novamente em alguns minutos ou informe o Estúdio.</p>";
+    return true;
+  }
+  if(!data){
+    document.getElementById("contractAcceptanceBox").innerHTML="<p>Não encontrei um contrato disponível neste link. Confira se você abriu o link completo enviado pelo Estúdio.</p>";
     return true;
   }
   const box=document.getElementById("contractAcceptanceBox");
+  if(data.status==='aceito'){
+    box.innerHTML=`<p>Este contrato já foi aceito${data.aceito_em?' em '+esc(new Date(data.aceito_em).toLocaleString('pt-BR')):''}. Não é necessário enviar novamente.</p>`;
+    return true;
+  }
   box.innerHTML=`<div style="max-height:420px;overflow:auto;border:1px solid #ddd;border-radius:10px;padding:18px;white-space:pre-wrap;margin:18px 0">${esc(data.conteudo||"")}</div><label style="display:block;margin:12px 0 6px">Nome completo</label><input id="acceptName" style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box"><label style="display:block;margin:12px 0 6px">CPF/RG ou documento</label><input id="acceptDocument" style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box"><label style="display:flex;gap:8px;align-items:center;margin:16px 0"><input type="checkbox" id="acceptCheck"> Declaro que li, compreendi e aceito o contrato.</label><button id="acceptButton" style="padding:12px 20px;border:0;border-radius:8px;cursor:pointer">Aceitar contrato</button><div id="acceptResult" style="margin-top:14px"></div>`;
   document.getElementById("acceptButton").onclick=async()=>{
     const nome=document.getElementById("acceptName").value.trim();
@@ -635,8 +645,11 @@ async function startContractAcceptance(){
     const confirmado=document.getElementById("acceptCheck").checked;
     const result=document.getElementById("acceptResult");
     if(!nome||!documento||!confirmado){result.textContent="Preencha os dados e confirme o aceite.";return;}
-    const {data:accepted,error:acceptError}=await supabaseClient.rpc("aceitar_contrato",{p_token:token,p_nome:nome,p_documento:documento});
-    if(acceptError||accepted===false||accepted===null){result.textContent="Não foi possível registrar o aceite. O contrato pode já ter sido aceito.";return;}
+    const button=document.getElementById("acceptButton");button.disabled=true;
+    let accepted,acceptError;
+    try{const response=await supabaseClient.rpc("aceitar_contrato",{p_token:token.trim(),p_nome:nome,p_documento:documento});accepted=response.data;acceptError=response.error;}
+    catch{acceptError=true;}
+    if(acceptError||accepted!=='aceito'){result.textContent="Não consegui confirmar o aceite. Reabra este link para conferir se ele foi registrado antes de tentar novamente.";button.disabled=false;return;}
     result.textContent="Contrato aceito com sucesso. Data e horário foram registrados.";
     document.getElementById("acceptButton").disabled=true;
   };

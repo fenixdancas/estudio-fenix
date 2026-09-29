@@ -78,3 +78,24 @@ test('Experimental attendance RPC cannot edit another teacher or administrative 
   assert.deepEqual(saved,{confirmacao:'Confirmou',presenca:'Compareceu'});
  }finally{await db.close();}
 });
+
+test('Public contract token lookup preserves table privacy and recognizes acceptance',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/202609290003_consulta_contrato_publico.sql'));
+  const token='0123456789abcdef0123456789abcdef0123456789abcdef';
+  const student=(await db.query("insert into alunas(nome) values('Teste') returning id")).rows[0].id;
+  await db.query("insert into contratos(aluna_id,versao,conteudo,token_aceite) values($1,'1','Contrato de teste',$2)",[student,token]);
+  await db.exec('set role anon');
+  await assert.rejects(db.query('select * from contratos'),/permission denied/);
+  const lookup=async t=>(await db.query('select fenix_consultar_contrato($1) result',[t])).rows[0].result;
+  assert.deepEqual(await lookup(token),{conteudo:'Contrato de teste',status:'pendente',aceito_em:null});
+  assert.equal(await lookup('invalido'),null);
+  assert.equal(await lookup('ffffffffffffffffffffffffffffffff'),null);
+  assert.equal((await db.query("select aceitar_contrato($1,'Aluna Teste','Documento Teste') result",[token])).rows[0].result,'aceito');
+  const accepted=await lookup(token);
+  assert.equal(accepted.status,'aceito');assert.ok(accepted.aceito_em);
+  assert.deepEqual(Object.keys(accepted).sort(),['aceito_em','conteudo','status']);
+ }finally{await db.close();}
+});

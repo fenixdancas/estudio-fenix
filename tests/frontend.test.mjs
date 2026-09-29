@@ -168,3 +168,30 @@ test('Legacy login label may appear but cannot bypass Supabase profile authoriza
  assert.equal(t.a.session,null);
  t.close();
 });
+
+test('Public contract loads by RPC, confirms acceptance and handles already accepted links',async()=>{
+ for(const status of ['enviado','aceito']){
+  const client=fakeClient();const calls=[];
+  client.rpc=async(name,p)=>{calls.push({name,p});return {data:name==='fenix_consultar_contrato'?{conteudo:'Contrato sintético',status,aceito_em:status==='aceito'?'2026-09-29T12:00:00Z':null}:'aceito'};};
+  const t=app(client,'https://example.test/?contrato=0123456789abcdef0123456789abcdef');
+  try{
+   await t.w.eval('startContractAcceptance()');
+   assert.equal(calls[0].name,'fenix_consultar_contrato');
+   const d=t.w.document;
+   if(status==='aceito'){assert.match(d.body.textContent,/já foi aceito/);assert.equal(d.getElementById('acceptButton'),null);}
+   else{
+    d.getElementById('acceptName').value='Teste';d.getElementById('acceptDocument').value='Documento sintético';d.getElementById('acceptCheck').checked=true;
+    await d.getElementById('acceptButton').onclick();
+    assert.match(d.getElementById('acceptResult').textContent,/aceito com sucesso/);
+    assert.equal(calls[1].name,'aceitar_contrato');assert.equal(d.getElementById('acceptButton').disabled,true);
+   }
+   assert.equal(client.calls.length,0);
+  }finally{t.close();}
+ }
+});
+
+test('Public contract network errors do not claim the link is invalid',async()=>{
+ const client=fakeClient();client.rpc=async()=>{throw new Error('Rede indisponível')};
+ const t=app(client,'https://example.test/?contrato=0123456789abcdef0123456789abcdef');
+ try{await t.w.eval('startContractAcceptance()');assert.match(t.w.document.body.textContent,/Não foi possível carregar/);assert.doesNotMatch(t.w.document.body.textContent,/inválido|expirou/);}finally{t.close();}
+});
