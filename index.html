@@ -522,8 +522,7 @@ function teachersMatch(a,b){
  const norm=v=>String(v||'').trim().toLowerCase();
  return (digits(a?.cpf)&&digits(a.cpf)===digits(b?.cpf))||
   (norm(a?.email)&&norm(a.email)===norm(b?.email))||
-  (digits(a?.fone)&&digits(a.fone)===digits(b?.fone))||
-  (norm(a?.nome)&&norm(a.nome)===norm(b?.nome));
+  (digits(a?.fone)&&digits(a.fone)===digits(b?.fone));
 }
 function uniqueTeachers(){
  const groups=[];
@@ -948,7 +947,7 @@ function novoProfessor(id){
  <div class="field"><label>E-mail</label><input name="email" value="${esc(t.email)}"></div><div class="field"><label>Usuário / e-mail de acesso</label><input name="login" value="${esc(t.login||t.email||"")}" placeholder="Ex.: ale@fenix"></div><div class="field"><label>Acesso ao sistema</label><select name="acessoAtivo"><option value="true" ${t.acessoAtivo!==false?"selected":""}>Ativo</option><option value="false" ${t.acessoAtivo===false?"selected":""}>Desativado</option></select></div><div class="field"><label>Observações</label><input name="obs" value="${esc(t.obs)}"></div>
  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar professor</button></div></form>`);
  document.getElementById("teacherPhoto").onchange=e=>previewPhoto(e,"teacherPhotoPreview");
- document.getElementById("profForm").onsubmit=async e=>{e.preventDefault();let o=Object.fromEntries(new FormData(e.currentTarget));o.foto=document.getElementById("teacherPhotoPreview")?.src?.startsWith("data:")?document.getElementById("teacherPhotoPreview").src:(t.foto||"");o.apelido=o.apelido||"";o.acessoAtivo=o.acessoAtivo!=="false";o.id=id||Number(document.getElementById("modalbox").dataset.draftId);if(id)Object.assign(db.teachers.find(x=>x.id==id),o);else {const draft=db.teachers.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.teachers.push(o);}log(id?"Professor atualizado":"Professor cadastrado",o.nome);await save();closeM();render()}
+ document.getElementById("profForm").onsubmit=async e=>{e.preventDefault();let o=Object.fromEntries(new FormData(e.currentTarget));o.foto=document.getElementById("teacherPhotoPreview")?.src?.startsWith("data:")?document.getElementById("teacherPhotoPreview").src:(t.foto||"");o.apelido=o.apelido||"";o.acessoAtivo=o.acessoAtivo!=="false";o.id=id||Number(document.getElementById("modalbox").dataset.draftId);if(o.acessoAtivo&&db.teachers.some(existing=>existing.id!==o.id&&existing.acessoAtivo!==false&&teachersMatch(existing,o))){alert("Já existe um cadastro ativo desta professora. Abra o cadastro existente para editar.");return;}if(id)Object.assign(db.teachers.find(x=>x.id==id),o);else {const draft=db.teachers.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.teachers.push(o);}log(id?"Professor atualizado":"Professor cadastrado",o.nome);await save();closeM();render()}
 }
 function previewPhoto(e,targetId){const f=e.target.files?.[0];if(!f)return;if(!["image/png","image/jpeg","image/webp"].includes(f.type)||f.size>1024*1024)return alert("Selecione PNG, JPEG ou WebP com até 1 MB.");const r=new FileReader();r.onload=()=>{const im=document.getElementById(targetId);im.src=r.result;im.style.display="block";im.classList.remove("empty")};r.readAsDataURL(f)}
 function novaTurma(id){
