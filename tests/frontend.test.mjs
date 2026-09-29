@@ -51,6 +51,25 @@ test('Duplicate teachers sharing phone are consolidated even when metadata diffe
  assert.equal(t.a.uniqueTeachers().length,1);
  t.close();
 });
+test('Same name alone does not merge different teachers',async()=>{
+ const t=app();
+ t.a.db.teachers=[{id:1,nome:'Ana Silva',email:'ana1@example.test'},{id:2,nome:'Ana Silva',email:'ana2@example.test'}];
+ assert.equal(t.a.uniqueTeachers().length,2);
+ t.close();
+});
+test('Teacher form refuses duplicate active email while allowing edits to existing record',async()=>{
+ const t=await setup();const original=t.a.db.teachers.length;
+ t.a.novoProfessor();let form=t.w.document.getElementById('profForm');
+ form.elements.nome.value='Outra professora';form.elements.email.value=t.a.db.teachers[0].email;
+ await form.onsubmit({preventDefault(){},currentTarget:form});
+ assert.equal(t.a.db.teachers.length,original);
+ assert(t.alerts.some(s=>s.includes('cadastro ativo')));
+ t.a.novoProfessor(t.a.db.teachers[0].id);form=t.w.document.getElementById('profForm');
+ form.elements.apelido.value='Apelido revisado';
+ await form.onsubmit({preventDefault(){},currentTarget:form});
+ assert.equal(t.a.db.teachers[0].apelido,'Apelido revisado');
+ t.close();
+});
 test('Legacy browser teacher data never overrides Supabase',async()=>{
  const t=app();
  t.w.localStorage.setItem('fenix_gestao_v2',JSON.stringify({teachers:[{id:77,nome:'Professora A',email:'legacy@example.test',foto:'data:image/png;base64,AAAA'}]}));
