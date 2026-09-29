@@ -71,6 +71,11 @@ test('Teacher records only attendance for own experimental; failed write stays v
  form.elements.presenca.value='Compareceu';t.client.fail({message:'Falha simulada'});await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(own.presenca,'');assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);
  t.client.fail(null);await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.client.tables.aulas_experimentais[0].dados_fenix.presenca,'Compareceu');assert.equal(t.client.tables.aulas_experimentais[0].dados_fenix.confirmacao,'Confirmou');assert.match(t.w.document.getElementById('saveStatus').textContent,/salvo no banco/);t.close();
 });
+test('Class schedule collision explains the conflict without claiming a save',async()=>{
+ const t=await setup();t.a.db.classes[0].dia='Sábado';t.client.rpc=async()=>({error:{code:'23505',message:'duplicate key violates unique constraint "uq_turma_horario_ativo"'}});
+ await assert.rejects(t.a.save(),/Já existe uma turma ativa em Sábado às 18:00/);
+ assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);t.close();
+});
 test('Teacher cannot edit other student or tuition',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].mensalidade=1;await assert.rejects(t.a.save(),/somente/);t.close();});
 test('Teacher search excludes unrelated student and staff data',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.view='busca';t.a.render();const input=t.w.document.getElementById('globalSearch');input.value='Aluna';input.oninput();assert.match(t.w.document.getElementById('searchResults').textContent,/Aluna A/);assert(!t.w.document.getElementById('searchResults').textContent.includes('Aluna B'));t.close();});
 test('Administrative entry points reject teacher calls',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher};for(const f of ['novaMatricula','novoProfessor','novaTurma','novaMensalidade','novaConta','novoEvento','novaComemorativa','exportBackup'])assert.throws(()=>t.a[f](),/administrativo/);t.close();});

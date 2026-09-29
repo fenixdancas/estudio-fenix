@@ -490,7 +490,7 @@ async function saveRecord(collection,row){
   rpc='fenix_salvar_aula_professora';params={p_id:id,p_turma:fields.turma_id,p_data:fields.data,p_versao:Number(row._version||0),p_presencas:links.presencas,p_dados:fields.dados_fenix};
  }
  const {data,error}=await supabaseClient.rpc(rpc,params);
- if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':error.message);
+ if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':collection==='classes'&&error.code==='23505'&&/uq_turma_horario_ativo/.test(error.message||'')?`Já existe uma turma ativa em ${row.dia} às ${row.hora}. Confira o horário ou edite a turma existente.`:error.message);
  if(!data||data.id!==id||!Number.isInteger(data.fenix_version))throw new Error('O banco não confirmou o salvamento.');
  row._version=data.fenix_version;
 }
