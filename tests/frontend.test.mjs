@@ -33,7 +33,7 @@ test('Retry after finance failure does not duplicate enrollment or charges',asyn
  };
  const t=app(client);await t.a.loadSupabaseDb();t.a.novaMatricula();
  const f=t.w.document.getElementById('studentForm');f.elements.nome.value='Aluna de teste';
- f.querySelector('input[name="modalidades"]').checked=true;f.querySelector('input[name="turmaIds"]').checked=true;
+ f.querySelector('input[name="modalidades"]').checked=true;f.querySelector('input[name="turmaIds"]').checked=true;f.elements.valorMatricula.value='60';
  await assert.rejects(f.onsubmit({preventDefault(){},currentTarget:f}),/Falha financeira simulada/);
  assert.equal(t.client.tables.alunas.length,3);assert.equal(t.client.tables.financeiro.length,0);
  await f.onsubmit({preventDefault(){},currentTarget:f});
@@ -46,9 +46,9 @@ test('Existing enrollments can generate missing receivables without duplicates',
  t.a.db.students[1].dataMatricula='2026-09-29';t.a.db.students[1].mensalidade='VIP';t.a.db.students[1].valorMatricula='VIP';
  await t.a.save();
  await t.w.eval('gerarCobrancasExistentes()');
- assert.deepEqual(t.client.tables.financeiro.map(r=>r.valor).sort((a,b)=>a-b),[60,255]);
+ assert.deepEqual(t.client.tables.financeiro.map(r=>r.valor).sort((a,b)=>a-b),[255]);
  await t.w.eval('gerarCobrancasExistentes()');
- assert.equal(t.client.tables.financeiro.length,2);
+ assert.equal(t.client.tables.financeiro.length,1);
  t.close();
 });
 test('Load failure never replaces existing data with partial data',async()=>{const t=await setup();const previous=JSON.stringify(t.a.db);t.client.fail({table:'alunas',message:'network'});await assert.rejects(t.a.loadSupabaseDb());assert.equal(JSON.stringify(t.a.db),previous);t.close();});
@@ -61,6 +61,16 @@ test('Teacher does not load finance and cannot write administrative data',async(
 test('Teacher UUID maps to class; same name never grants access',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora B'};assert.equal(t.a.visibleClasses().length,1);assert.equal(t.a.visibleStudents().length,1);assert.equal(t.a.teacherOwnsClass(t.a.db.classes[1]),false);t.close();});
 test('Teacher observations use scoped RPC',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].obs='Adaptação nova';await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc');assert.equal(call.name,'fenix_salvar_observacao_professora');assert.equal(call.p.p_obs,'Adaptação nova');t.close();});
 test('Teacher attendance uses scoped RPC for own class',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.attendance.push({id:901,data:'2026-09-23',turmaId:t.a.db.classes[0].id,studentIds:[t.a.db.students[0].id],status:['Presente'],pres:[true],obs:'Aula'});await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc');assert.equal(call.name,'fenix_salvar_aula_professora');assert.equal(call.p.p_turma,ids.class);t.close();});
+test('Teacher records only attendance for own experimental; failed write stays visible',async()=>{
+ const tables=fixtures();tables.aulas_experimentais=[{id:'60000000-0000-4000-8000-000000000001',nome:'Visitante',telefone:'11999999999',modalidade:'Ballet',data:'2026-09-30',horario:'18:00',professora_id:ids.teacher,status:'Confirmada',dados_fenix:{confirmacao:'Confirmou',matricula:''}},{id:'60000000-0000-4000-8000-000000000002',nome:'Outra',telefone:'11999999998',modalidade:'Ballet',data:'2026-09-30',horario:'19:00',professora_id:ids.teacher2,status:'Agendada'}];
+ const t=app(fakeClient(tables));t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};await t.a.loadSupabaseDb();
+ t.a.view='experimentais';t.a.render();assert(!t.w.document.getElementById('page').textContent.includes('Outra'));
+ const own=t.a.db.experimental[0],other=t.a.db.experimental[1];
+ assert.throws(()=>t.w.eval(`verExperimental(${other.id})`),/não vinculada/);
+ t.w.eval(`verExperimental(${own.id})`);const form=t.w.document.getElementById('teacherExperimentalForm');assert(form);assert(!form.elements.matricula);
+ form.elements.presenca.value='Compareceu';t.client.fail({message:'Falha simulada'});await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(own.presenca,'');assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);
+ t.client.fail(null);await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.client.tables.aulas_experimentais[0].dados_fenix.presenca,'Compareceu');assert.equal(t.client.tables.aulas_experimentais[0].dados_fenix.confirmacao,'Confirmou');assert.match(t.w.document.getElementById('saveStatus').textContent,/salvo no banco/);t.close();
+});
 test('Teacher cannot edit other student or tuition',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].mensalidade=1;await assert.rejects(t.a.save(),/somente/);t.close();});
 test('Teacher search excludes unrelated student and staff data',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.view='busca';t.a.render();const input=t.w.document.getElementById('globalSearch');input.value='Aluna';input.oninput();assert.match(t.w.document.getElementById('searchResults').textContent,/Aluna A/);assert(!t.w.document.getElementById('searchResults').textContent.includes('Aluna B'));t.close();});
 test('Administrative entry points reject teacher calls',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher};for(const f of ['novaMatricula','novoProfessor','novaTurma','novaMensalidade','novaConta','novoEvento','novaComemorativa','exportBackup'])assert.throws(()=>t.a[f](),/administrativo/);t.close();});

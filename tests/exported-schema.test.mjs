@@ -56,3 +56,25 @@ test('Exported RLS permits scoped teacher observations and lessons through narro
   await assert.rejects(db.query("select fenix_salvar_aula_professora($1,$2,'2026-09-24',1,'[]','{}')",[lesson,'00000000-0000-4000-8000-000000000099']),/Turma não vinculada/);
  }finally{await db.close();}
 });
+
+test('Experimental attendance RPC cannot edit another teacher or administrative fields',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/202609280001_aulas_experimentais.sql'));
+  await db.exec(read('../supabase/migrations/202609290001_resultados_experimentais.sql'));
+  await db.exec(read('../supabase/migrations/202609290002_presenca_experimental_professora.sql'));
+  const user='00000000-0000-4000-8000-000000000031',teacher='00000000-0000-4000-8000-000000000032',other='00000000-0000-4000-8000-000000000033';
+  await db.query('insert into auth.users(id) values ($1)',[user]);
+  await db.query("insert into professoras(id,nome) values($1,'A'),($2,'B')",[teacher,other]);
+  await db.query("insert into perfis(id,professora_id,nome,papel) values($1,$2,'A','professora')",[user,teacher]);
+  const rows=await db.query("insert into aulas_experimentais(nome,telefone,modalidade,data,horario,professora_id,dados_fenix) values('Visitante','11999999999','Ballet','2026-09-30','18:00',$1,'{\"confirmacao\":\"Confirmou\"}'),('Outra','11999999998','Ballet','2026-09-30','19:00',$2,'{}') returning id",[teacher,other]);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);await db.exec('set role authenticated');
+  await assert.rejects(db.query('select fenix_registrar_presenca_experimental($1,$2)',[rows.rows[1].id,'Compareceu']),/não vinculada/);
+  await assert.rejects(db.query('select fenix_registrar_presenca_experimental($1,$2)',[rows.rows[0].id,'Fez matrícula']),/inválido/);
+  const result=(await db.query('select fenix_registrar_presenca_experimental($1,$2) result',[rows.rows[0].id,'Compareceu'])).rows[0].result;
+  assert.equal(result.presenca,'Compareceu');
+  const saved=(await db.query('select dados_fenix from aulas_experimentais where id=$1',[rows.rows[0].id])).rows[0].dados_fenix;
+  assert.deepEqual(saved,{confirmacao:'Confirmou',presenca:'Compareceu'});
+ }finally{await db.close();}
+});
