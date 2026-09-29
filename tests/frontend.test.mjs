@@ -119,6 +119,22 @@ test('Same name alone does not merge different teachers',async()=>{
  assert.equal(t.a.uniqueTeachers().length,2);
  t.close();
 });
+test('Registrations sort by Portuguese names without changing saved order or teacher scope',async()=>{
+ const t=await setup();
+ try{
+ t.a.db.students[0].nome='Zoé';t.a.db.students[1].nome='Álvaro';
+ t.a.db.classes[0].nome='Jazz 10';t.a.db.classes[1].nome='Ballet 2';
+ t.a.db.teachers[0].nome='Zoé';t.a.db.teachers[1].nome='Álvaro';
+ assert.deepEqual(Array.from(t.a.visibleStudents(),x=>x.nome),['Álvaro','Zoé']);
+ assert.deepEqual(Array.from(t.a.visibleClasses(),x=>x.nome),['Ballet 2','Jazz 10']);
+ assert.deepEqual(Array.from(t.a.uniqueTeachers(),x=>x.nome),['Álvaro','Zoé']);
+ assert.deepEqual(Array.from(t.a.db.students,x=>x.nome),['Zoé','Álvaro']);
+ t.a.view='alunos';t.a.render();
+ const names=[...t.w.document.querySelectorAll('#studentTable td:nth-child(3) strong')].map(x=>x.textContent);
+ assert.deepEqual(names,['Álvaro','Zoé']);
+ t.a.session={tipo:'teacher',teacherId:ids.teacher};assert.deepEqual(Array.from(t.a.visibleStudents(),x=>x.nome),['Zoé']);
+ }finally{t.close();}
+});
 test('Teacher form refuses duplicate active email while allowing edits to existing record',async()=>{
  const t=await setup();const original=t.a.db.teachers.length;
  t.a.novoProfessor();let form=t.w.document.getElementById('profForm');

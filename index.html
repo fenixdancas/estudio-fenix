@@ -294,6 +294,8 @@ const money=n=>Number(n||0).toLocaleString("pt-BR",{style:"currency",currency:"B
 const dateBR=d=>d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"";
 const nowISO=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const esc=s=>String(s??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
+const nameCollator=new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true});
+const byName=rows=>rows.slice().sort((a,b)=>nameCollator.compare(a.nome||'',b.nome||''));
 let lastLocalId=0;
 const uid=()=>lastLocalId=Math.max(Date.now(),lastLocalId+1);
 const dayNames=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
@@ -555,7 +557,7 @@ function uniqueTeachers(){
   for(const field of ['nome','apelido','fone','email','cpf','foto'])if(!keep[field]&&t[field])keep[field]=t[field];
   keep.acessoAtivo=keep.acessoAtivo||t.acessoAtivo;
  }
- return groups;
+ return byName(groups);
 }
 
 async function renderLogin(){
@@ -709,10 +711,10 @@ function teacherOwnsStudent(s){
  return ids.some(id=>db.classes.some(c=>teacherIdMatches(c.id,id) && teacherOwnsClass(c)));
 }
 function visibleClasses(){
- return session?.tipo==="teacher" ? db.classes.filter(teacherOwnsClass) : db.classes;
+ return byName(session?.tipo==="teacher" ? db.classes.filter(teacherOwnsClass) : db.classes);
 }
 function visibleStudents(){
- return session?.tipo==="teacher" ? db.students.filter(teacherOwnsStudent) : db.students;
+ return byName(session?.tipo==="teacher" ? db.students.filter(teacherOwnsStudent) : db.students);
 }
 function applyAccess(){
  const teacher=session?.tipo==="teacher";
@@ -783,13 +785,13 @@ config:()=>head("Configurações","Usuários, senhas e dados básicos do sistema
 function bind(){
  if(view==="alunos"){
   const input=document.getElementById("studentSearch");
-  const draw=()=>{let q=(input.value||"").toLowerCase();let a=db.students.filter(s=>(s.nome+" "+(s.fone||"")+" "+(s.numeroMatricula||"")).toLowerCase().includes(q));
+  const draw=()=>{let q=(input.value||"").toLowerCase();let a=visibleStudents().filter(s=>(s.nome+" "+(s.fone||"")+" "+(s.numeroMatricula||"")).toLowerCase().includes(q));
   document.getElementById("studentTable").innerHTML=session?.tipo==="teacher"?`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Status</th><th></th></tr>${a.filter(teacherOwnsStudent).map(s=>`<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td><span class="badge ${s.status==='inativo'?'neutral':'ok'}">${s.status==='inativo'?'Inativo':'Ativo'}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`).join("")||tableEmpty(8)}</table>`:`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Mensalidade</th><th>Status</th><th></th></tr>${a.map(s=>`<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td>${s.mensalidade==null?"Não informada":s.mensalidade==="VIP"?"VIP":money(s.mensalidade)}</td><td><span class="badge ${s.status==='inativo'?'neutral':'ok'}">${s.status==='inativo'?'Inativo':'Ativo'}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`).join("")||tableEmpty(9)}</table>`};input.oninput=draw;draw();
  }
  if(view==="busca"){
   const input=document.getElementById("globalSearch"), out=document.getElementById("searchResults");
   input.oninput=()=>{let q=input.value.toLowerCase().trim();if(!q){out.innerHTML="";return}
-   let a=[...visibleStudents().map(x=>({tipo:"Aluno",nome:x.nome,extra:x.fone||""})),...(session?.tipo==="admin"?db.teachers:[]).map(x=>({tipo:"Professor",nome:x.nome,extra:x.fone||""})),...visibleClasses().map(x=>({tipo:"Turma",nome:x.nome,extra:x.dia+" · "+x.hora}))].filter(x=>(x.nome+" "+x.extra).toLowerCase().includes(q));
+   let a=byName([...visibleStudents().map(x=>({tipo:"Aluno",nome:x.nome,extra:x.fone||""})),...(session?.tipo==="admin"?db.teachers:[]).map(x=>({tipo:"Professor",nome:x.nome,extra:x.fone||""})),...visibleClasses().map(x=>({tipo:"Turma",nome:x.nome,extra:x.dia+" · "+x.hora}))].filter(x=>(x.nome+" "+x.extra).toLowerCase().includes(q)));
    out.innerHTML=`<div class="panel">${a.map(x=>`<p><span class="badge neutral">${x.tipo}</span> <strong>${esc(x.nome)}</strong> <span class="muted">${esc(x.extra)}</span></p>`).join("")||'<p class="muted">Nenhum resultado.</p>'}</div>`;
   }
  }
