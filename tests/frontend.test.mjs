@@ -1,6 +1,52 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {app,fixtures,fakeClient,ids,html} from './harness.mjs';
 async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
+test('Enrollment tuition follows the selected due day while fee keeps enrollment date',async()=>{
+ for(const [day,date,expected] of [['10','2026-10-01','2026-10-10'],['20','2026-10-01','2026-10-20'],['30','2026-02-01','2026-02-28'],['30','2028-02-01','2028-02-29']]){
+  const t=await setup();
+  try{
+   Object.assign(t.a.db.students[0],{diaVenc:day,dataMatricula:date,valorMatricula:'60'});
+   t.w.eval('createEnrollmentReceivables(window.testAPI.db.students[0])');await t.a.save();await t.a.loadSupabaseDb();
+   assert.equal(t.a.db.payments.find(p=>p._tipo==='mensalidade').venc,expected);
+   assert.equal(t.a.db.payments.find(p=>p._tipo==='entrada').venc,date);
+   assert(t.client.tables.financeiro.every(p=>p.pago_em===null&&p.status==='em_aberto'));
+  }finally{t.close();}
+ }
+});
+test('Monthly form updates due date for student and month and accepts an explicit exception',async()=>{
+ const t=await setup();
+ try{
+  t.a.db.students[0].diaVenc='10';t.a.db.students[1].diaVenc='30';
+  t.a.novaMensalidade();const form=t.w.document.getElementById('payForm');
+  assert.equal(form.elements.venc.value,t.a.nowISO().slice(0,7)+'-10');
+  form.elements.studentId.value=t.a.db.students[1].id;form.elements.studentId.onchange();
+  form.elements.comp.value='2026-02';form.elements.comp.onchange();assert.equal(form.elements.venc.value,'2026-02-28');
+  form.elements.venc.value='2026-02-25';await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(t.client.tables.financeiro[0].vencimento,'2026-02-25');assert.equal(t.client.tables.financeiro[0].pago_em,null);
+ }finally{t.close();}
+});
+test('Payment date stays separate from due date through receipt, edits and reload',async()=>{
+ const t=app();
+ t.client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',descricao:'2026-10',valor:255,status:'em_aberto',vencimento:'2026-10-01',pago_em:null});
+ try{
+  await t.a.loadSupabaseDb();t.a.db.students[0].diaVenc='20';const id=t.a.db.payments[0].id;
+  t.w.eval(`editarDatasMensalidade(${id})`);let form=t.w.document.getElementById('paymentDatesForm');
+  assert.equal(form.elements.data,undefined);t.w.document.getElementById('useEnrollmentDue').click();
+  await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(t.client.tables.financeiro[0].vencimento,'2026-10-20');assert.equal(t.client.tables.financeiro[0].pago_em,null);
+  t.w.eval(`receber(${id})`);form=t.w.document.getElementById('receiveForm');form.elements.data.value='2026-10-05';
+  await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(t.client.tables.financeiro[0].pago_em,'2026-10-05T12:00:00-03:00');assert.equal(t.client.tables.financeiro[0].vencimento,'2026-10-20');
+  t.w.eval(`editarDatasMensalidade(${id})`);form=t.w.document.getElementById('paymentDatesForm');form.elements.venc.value='2026-10-10';
+  await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(t.client.tables.financeiro[0].pago_em,'2026-10-05T12:00:00-03:00');
+  t.w.eval(`editarDatasMensalidade(${id})`);form=t.w.document.getElementById('paymentDatesForm');form.elements.data.value='2026-10-06';
+  await form.onsubmit({preventDefault(){},currentTarget:form});await t.a.loadSupabaseDb();
+  assert.equal(t.a.db.payments[0].venc,'2026-10-10');assert.equal(t.a.db.payments[0].data,'2026-10-06');assert.equal(t.a.db.payments[0].pago,true);
+  t.a.view='mensalidades';t.a.render();assert.match(t.w.document.getElementById('page').textContent,/Data do pagamento/);
+  t.a.session={tipo:'teacher',teacherId:ids.teacher};assert.throws(()=>t.w.eval(`editarDatasMensalidade(${id})`),/administrativo/);
+ }finally{t.close();}
+});
 test('Consecutive new records keep both saved entries instead of replacing the first',async()=>{
  for(const [method,formId,collection,table] of [['novaConta','expenseForm','expenses','financeiro'],['novoEvento','eventForm','events','eventos'],['novaComemorativa','commForm','commemorative','datas_comemorativas'],['novaMensalidade','payForm','payments','financeiro']]){
   const t=await setup();

@@ -293,6 +293,13 @@ let syncTimer = null;
 const money=n=>Number(n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dateBR=d=>d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"";
 const nowISO=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+function monthlyDueDate(student,month){
+ const day=Number(student?.diaVenc);
+ if(!/^\d{4}-\d{2}$/.test(month||'')||!Number.isInteger(day)||day<1||day>31)return '';
+ const [year,m]=month.split('-').map(Number);if(m<1||m>12)return '';
+ const lastDay=new Date(year,m,0).getDate();
+ return month+'-'+String(Math.min(day,lastDay)).padStart(2,'0');
+}
 const esc=s=>String(s??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
 const nameCollator=new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true});
 const byName=rows=>rows.slice().sort((a,b)=>nameCollator.compare(a.nome||'',b.nome||''));
@@ -501,6 +508,7 @@ async function saveRecord(collection,row){
  if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':collection==='classes'&&error.code==='23505'&&/uq_turma_horario_ativo/.test(error.message||'')?`Já existe uma turma ativa em ${row.dia} às ${row.hora}. Confira o horário ou edite a turma existente.`:error.message);
  if(!data||data.id!==id||!Number.isInteger(data.fenix_version))throw new Error('O banco não confirmou o salvamento.');
  row._version=data.fenix_version;
+ if(collection==='payments'||collection==='expenses'){row._pagoEm=fields.pago_em;row._status=fields.status;}
 }
 async function syncChangedData(){
  if(syncPromise)return syncPromise;
@@ -510,7 +518,9 @@ async function syncChangedData(){
   for(const collection of Object.keys(COLLECTIONS))for(const row of db[collection]){
    if(baseline[collection+':'+row.id]===JSON.stringify(row))continue;
    const snapshot=clone(row);await saveRecord(collection,snapshot);
-   row._version=snapshot._version;baseline[collection+':'+row.id]=JSON.stringify(snapshot);saveLocalOnly();
+   row._version=snapshot._version;
+   if(collection==='payments'||collection==='expenses'){row._pagoEm=snapshot._pagoEm;row._status=snapshot._status;}
+   baseline[collection+':'+row.id]=JSON.stringify(snapshot);saveLocalOnly();
   }
   setSaveStatus(hasPendingChanges()?'Há alterações pendentes.':'Salvo no banco',hasPendingChanges()?'pending':'ok');
  })().catch(err=>{saveLocalOnly();setSaveStatus('Não salvo: '+err.message,'bad');throw err;}).finally(()=>{syncPromise=null;});
@@ -776,7 +786,7 @@ presenca:()=>{const ats=session?.tipo==="teacher"?db.attendance.filter(a=>visibl
 experimentais:()=>{const xs=(db.experimental||[]).filter(x=>session?.tipo!=="teacher"||teacherIdMatches(x.profId,session.teacherId)||teacherIdMatches(x.profId,remoteIds["professoras:"+session.teacherId+":local"]));return head("Aulas experimentais",experimentalAvailable?"Agende uma vez. A professora acompanha aqui e a confirmação fica pronta para a futura aluna.":"Agendamento indisponível: instale a tabela de aulas experimentais no Supabase.",session?.tipo==="teacher"||!experimentalAvailable?"":`<button class="btn primary" onclick="novaExperimental()">＋ Agendar experimental</button>`)+
  `<div class="panel"><table><tr><th>Aluna(o)</th><th>Modalidade</th><th>Data</th><th>Horário</th><th>Professora</th><th>Status</th><th>Presença</th>${session?.tipo==='admin'?'<th>Matrícula</th><th>Plano</th><th>Confirmação</th>':''}<th></th></tr>${xs.slice().sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora)).map(x=>`<tr><td><strong>${esc(x.nome)}</strong><div class="small muted">${esc(x.fone||"")}</div></td><td>${esc(x.modalidade)}</td><td>${dateBR(x.data)}</td><td>${esc(x.hora)}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.nome||"—")}</td><td><span class="badge ${x.status==="Confirmada"?"ok":"pending"}">${esc(x.status||"Agendada")}</span></td><td>${esc(x.presenca||"—")}</td>${session?.tipo==='admin'?`<td>${esc(x.matricula||"—")}</td><td>${esc(x.contratacao||"—")}</td><td>${esc(x.confirmacao||"—")}</td>`:''}<td><button class="btn" onclick="verExperimental(${x.id})">Abrir</button></td></tr>`).join("")||tableEmpty(session?.tipo==='admin'?11:8,"Nenhuma aula experimental agendada.")}</table></div>`},
 mensalidades:()=>head("Mensalidades","Contas a receber: mensalidades e taxas de matrícula.",`<div class="actions"><button class="btn" onclick="gerarCobrancasExistentes()">Gerar cobranças das matrículas existentes</button><button class="btn primary" onclick="novaMensalidade()">＋ Nova mensalidade</button></div>`)+
- `<div class="panel"><table><tr><th>Aluno</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>Forma</th><th></th></tr>${db.payments.slice().sort((a,b)=>(b.venc||"").localeCompare(a.venc||"")).map(p=>`<tr><td>${esc(p.aluno)}</td><td>${esc(p.comp||"—")}</td><td>${money(p.valor)}</td><td>${dateBR(p.venc)}</td><td>${financeBadge(p)}</td><td>${esc(p.forma||"—")}${p.tipoMensalidade==="VIP"?` · <span class="badge neutral">VIP</span>`:""}</td><td>${p.pago?`<span class="small muted">Pago em ${dateBR(p.data)}</span>`:financePending(p)?`<button class="btn primary" onclick="receber(${p.id})">Receber</button>`:'—'}</td></tr>`).join("")||tableEmpty(7)}</table></div>`,
+ `<div class="panel"><table><tr><th>Aluno</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Data do pagamento</th><th>Status</th><th>Forma</th><th></th></tr>${db.payments.slice().sort((a,b)=>(b.venc||"").localeCompare(a.venc||"")).map(p=>`<tr><td>${esc(p.aluno)}</td><td>${esc(p.comp||"—")}</td><td>${money(p.valor)}</td><td>${dateBR(p.venc)||"A definir"}</td><td>${p.pago?(dateBR(p.data)||"Não informada"):"—"}</td><td>${financeBadge(p)}</td><td>${esc(p.forma||"—")}${p.tipoMensalidade==="VIP"?` · <span class="badge neutral">VIP</span>`:""}</td><td>${financePending(p)?`<button class="btn primary" onclick="receber(${p.id})">Receber</button>`:""} <button class="btn" onclick="editarDatasMensalidade(${p.id})">Editar datas</button></td></tr>`).join("")||tableEmpty(8)}</table></div>`,
 contas:()=>head("Contas a pagar","Controle de despesas, vencimentos e pagamentos.",`<button class="btn primary" onclick="novaConta()">＋ Nova conta</button>`)+
  `<div class="panel"><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr>${db.expenses.slice().sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).map(e=>`<tr><td>${esc(e.nome)}</td><td>${esc(e.cat||"—")}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td>${financeBadge(e,true)}</td><td>${e.pago?`<span class="small muted">${dateBR(e.data)}</span>`:financePending(e)?`<button class="btn" onclick="pagarConta(${e.id})">Marcar paga</button>`:'—'}</td></tr>`).join("")||tableEmpty(6)}</table></div>`,
 financeiro:()=>{
@@ -945,13 +955,13 @@ function collectChecks(fd,name){return fd.getAll(name)}
 function createEnrollmentReceivables(student,{includeFee=true}={}){
  const date=student.dataMatricula||nowISO(),feeLabel='Matrícula · '+date,month=date.slice(0,7);
  const items=[
-  {comp:feeLabel,valor:includeFee&&String(student.valorMatricula)==='60'?60:null,_tipo:'entrada'},
-  {comp:month,valor:student.mensalidade==='VIP'||student.mensalidade==null||String(student.mensalidade).trim()===''?null:Number(student.mensalidade),_tipo:'mensalidade'}
+  {comp:feeLabel,valor:includeFee&&String(student.valorMatricula)==='60'?60:null,_tipo:'entrada',venc:date},
+  {comp:month,valor:student.mensalidade==='VIP'||student.mensalidade==null||String(student.mensalidade).trim()===''?null:Number(student.mensalidade),_tipo:'mensalidade',venc:monthlyDueDate(student,month)}
  ];
  for(const item of items){
   if(item.valor===null||!Number.isFinite(item.valor)||item.valor<0)continue;
   if(db.payments.some(p=>p.studentId===student.id&&p.comp===item.comp))continue;
-  db.payments.push({id:uid(),studentId:student.id,aluno:student.nome,...item,venc:date,pago:false,forma:student.forma||'',tipoMensalidade:(item._tipo==='entrada'?student.valorMatricula:student.mensalidade)==='VIP'?'VIP':'Regular'});
+  db.payments.push({id:uid(),studentId:student.id,aluno:student.nome,...item,pago:false,forma:student.forma||'',tipoMensalidade:(item._tipo==='entrada'?student.valorMatricula:student.mensalidade)==='VIP'?'VIP':'Regular'});
  }
 }
 async function gerarCobrancasExistentes(){
@@ -1100,15 +1110,32 @@ function novaMensalidade(){
  <div class="field"><label>Vencimento *</label><input type="date" name="venc" required></div>
  <div class="field"><label>Forma</label><select name="forma"><option>Pix</option><option>Débito</option><option>Dinheiro</option></select></div>
  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Lançar mensalidade</button></div></form>`);
- const syncPaymentStudent=()=>{const student=db.students.find(s=>s.id==document.getElementById("payStudent").value);document.getElementById("payValue").value=student?.mensalidade==="VIP"?"":(student?.mensalidade??"");document.querySelector('#payForm [name="tipoMensalidade"]').value=student?.mensalidade==="VIP"?'VIP':'Regular';};
+ const syncPaymentDue=()=>{const form=document.getElementById('payForm'),student=db.students.find(s=>s.id==form.elements.studentId.value);form.elements.venc.value=monthlyDueDate(student,form.elements.comp.value);};
+ const syncPaymentStudent=()=>{const student=db.students.find(s=>s.id==document.getElementById("payStudent").value);document.getElementById("payValue").value=student?.mensalidade==="VIP"?"":(student?.mensalidade??"");document.querySelector('#payForm [name="tipoMensalidade"]').value=student?.mensalidade==="VIP"?'VIP':'Regular';syncPaymentDue();};
  document.getElementById("payStudent").onchange=syncPaymentStudent;syncPaymentStudent();
+ document.querySelector('#payForm [name="comp"]').onchange=syncPaymentDue;
  document.getElementById("payForm").onsubmit=async e=>{e.preventDefault();let o=Object.fromEntries(new FormData(e.currentTarget));o.id=Number(document.getElementById("modalbox").dataset.draftId);o.studentId=+o.studentId;if(db.payments.some(p=>p.id!==o.id&&p.studentId===o.studentId&&p.comp===o.comp)){alert("Já existe mensalidade para esta aluna nesta competência.");return;}o.valor=Number(o.valor);o.aluno=db.students.find(s=>s.id==o.studentId)?.nome||"";o.tipoMensalidade=o.tipoMensalidade||"Regular";o.pago=false;{const draft=db.payments.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.payments.push(o);}log("Mensalidade lançada",o.aluno+" · "+money(o.valor));await save();closeM();render()}
+}
+function editarDatasMensalidade(id){
+ requireAdmin();
+ const payment=db.payments.find(p=>p.id==id);if(!payment)return;
+ const student=db.students.find(s=>s.id===payment.studentId);
+ const suggested=payment._tipo==='entrada'?'':monthlyDueDate(student,payment.comp);
+ openM('Editar datas da cobrança',`<form id="paymentDatesForm" class="form-grid"><p class="full"><strong>${esc(payment.aluno)}</strong> · ${esc(payment.comp)} · ${money(payment.valor)}</p><div class="field"><label>Vencimento *</label><input type="date" name="venc" value="${esc(payment.venc||'')}" required>${suggested?'<button type="button" class="btn" id="useEnrollmentDue">Usar vencimento do cadastro</button>':''}</div>${payment.pago?`<div class="field"><label>Data em que o pagamento foi realizado *</label><input type="date" name="data" value="${esc(payment.data||'')}" required></div>`:'<p class="small muted full">O pagamento será registrado separadamente ao receber esta cobrança.</p>'}<div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar datas</button></div></form>`);
+ const form=document.getElementById('paymentDatesForm');
+ if(suggested)document.getElementById('useEnrollmentDue').onclick=()=>{form.elements.venc.value=suggested;};
+ form.onsubmit=async e=>{
+  e.preventDefault();const fd=new FormData(e.currentTarget),venc=fd.get('venc'),date=fd.get('data');
+  if(!venc||(payment.pago&&!date)){alert('Preencha as datas indicadas.');return;}
+  payment.venc=venc;if(payment.pago)payment.data=date;
+  await save();log('Datas da cobrança atualizadas',payment.aluno+' · '+payment.comp);closeM();render();
+ };
 }
 function receber(id){
  requireAdmin();
  if(!financePending(db.payments.find(x=>x.id==id)||{_status:'ausente'})){alert('Esta cobrança não está aberta para recebimento.');return;}
- let p=db.payments.find(x=>x.id==id);openM("Registrar pagamento",`<form id="receiveForm"><p><strong>${esc(p.aluno)}</strong> · ${money(p.valor)}</p><div class="field"><label>Data do pagamento</label><input type="date" name="data" value="${nowISO()}"></div><div class="field"><label>Forma de pagamento</label><select name="forma"><option>Pix</option><option>Débito</option><option>Dinheiro</option></select></div><div class="actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Confirmar pagamento</button></div></form>`);
- document.getElementById("receiveForm").onsubmit=async e=>{e.preventDefault();let fd=new FormData(e.currentTarget);p.pago=true;p.data=fd.get("data")||nowISO();p.forma=fd.get("forma");log("Pagamento recebido",p.aluno+" · "+money(p.valor));await save();closeM();render()}
+ let p=db.payments.find(x=>x.id==id);openM("Registrar pagamento",`<form id="receiveForm"><p><strong>${esc(p.aluno)}</strong> · ${money(p.valor)}</p><div class="field"><label>Data em que o pagamento foi realizado *</label><input type="date" name="data" value="${nowISO()}" required></div><div class="field"><label>Forma de pagamento</label><select name="forma"><option>Pix</option><option>Débito</option><option>Dinheiro</option></select></div><div class="actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Confirmar pagamento</button></div></form>`);
+ document.getElementById("receiveForm").onsubmit=async e=>{e.preventDefault();let fd=new FormData(e.currentTarget);const date=fd.get("data");if(!date){alert("Informe a data em que o pagamento foi realizado.");return;}p.pago=true;p.data=date;p.forma=fd.get("forma");log("Pagamento recebido",p.aluno+" · "+money(p.valor));await save();closeM();render()}
 }
 function novaConta(){
  requireAdmin();
