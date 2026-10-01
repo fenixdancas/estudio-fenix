@@ -433,6 +433,27 @@ async function loadSupabaseDb(){
  // Commit only after every requested table loaded; never expose another user's cache.
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
+ await repairLegacyMonthlyDueDates();
+}
+async function repairLegacyMonthlyDueDates(){
+ if(session?.tipo!=='admin')return;
+ const rows=db.payments.filter(payment=>{
+  const student=db.students.find(s=>s.id===payment.studentId);
+  const due=monthlyDueDate(student,payment.comp);
+  return payment._tipo==='mensalidade'&&financeStatus(payment)==='em_aberto'&&
+   student?.dataMatricula&&payment.comp===student.dataMatricula.slice(0,7)&&
+   payment.venc===student.dataMatricula&&due&&due!==payment.venc;
+ });
+ if(!rows.length)return;
+ setSaveStatus('Corrigindo vencimentos antigos…');
+ try{
+  for(const row of rows){
+   const student=db.students.find(s=>s.id===row.studentId),snapshot={...clone(row),venc:monthlyDueDate(student,row.comp)};
+   await saveRecord('payments',snapshot);
+   Object.assign(row,snapshot);baseline['payments:'+row.id]=JSON.stringify(snapshot);saveLocalOnly();
+  }
+  setSaveStatus('Vencimentos corrigidos no banco','ok');
+ }catch(err){setSaveStatus('Não foi possível corrigir todos os vencimentos antigos: '+err.message,'bad');}
 }
 async function refreshSharedData({automatic=false}={}){
  if(!session||!dataLoaded||refreshPromise||syncPromise)return;
