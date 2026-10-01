@@ -20,10 +20,22 @@ try{
   await page.locator('button[data-view="alunos"]').click();await page.getByRole('button',{name:'Abrir ficha',exact:true}).first().click();await page.locator('#mensalidadeOpcao').selectOption('500');await page.locator('#studentForm [name="nome"]').fill('Aluna A');await page.locator('#studentForm [name="nasc"]').fill('2000-01-01');await page.locator('#studentForm [name="fone"]').fill('11900000000');await page.getByRole('button',{name:'Salvar matrícula',exact:true}).click();await page.getByText('Contrato de prestação de serviço',{exact:true}).waitFor();await page.getByRole('button',{name:'Fechar',exact:true}).click();assert(await page.getByText('R$ 500,00',{exact:true}).isVisible());
   // Independent reload: persisted mocked database is retained in test context, no app cache shortcuts.
   await page.evaluate(async()=>{await loadSupabaseDb();go('alunos');});assert(await page.getByText('R$ 500,00',{exact:true}).isVisible());
+  await page.locator('button[data-view="mensalidades"]').click();await page.getByRole('button',{name:'＋ Nova mensalidade',exact:true}).click();
+  await page.locator('#payForm [name="comp"]').fill('2026-10');await page.locator('#payForm [name="comp"]').dispatchEvent('change');
+  assert.equal(await page.locator('#payForm [name="venc"]').inputValue(),'2026-10-10');
+  await page.getByRole('button',{name:'Lançar mensalidade',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Receber',exact:true}).click();await page.locator('#receiveForm [name="data"]').fill('2026-10-05');
+  await page.getByRole('button',{name:'Confirmar pagamento',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  assert(await page.getByText('05/10/2026',{exact:true}).isVisible());assert(await page.getByText('10/10/2026',{exact:true}).isVisible());
+  await page.getByRole('button',{name:'Editar datas',exact:true}).click();await page.locator('#paymentDatesForm [name="venc"]').fill('2026-10-20');
+  await page.getByRole('button',{name:'Salvar datas',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  await page.evaluate(async()=>{await loadSupabaseDb();go('mensalidades');});
+  assert(await page.getByText('05/10/2026',{exact:true}).isVisible());assert(await page.getByText('20/10/2026',{exact:true}).isVisible());
+  await page.locator('button[data-view="alunos"]').click();
   await page.screenshot({path:path.join(root,`test-results/alunas-${viewport.width}.png`),fullPage:true});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,'No page-wide horizontal overflow');
   await page.locator('#logoutBtn').click();await page.locator('#loginScreen').waitFor({state:'visible'});await page.screenshot({path:path.join(root,`test-results/login-${viewport.width}.png`),fullPage:true});
-  assert.deepEqual(errors,[]);results.push({viewport,passed:true,flows:['login','13 views','event','commemorative','attendance','enrollment','reload','logout'],pageErrors:errors});await context.close();
+  assert.deepEqual(errors,[]);results.push({viewport,passed:true,flows:['login','13 views','event','commemorative','attendance','enrollment','monthly due date','actual payment date','edit dates','reload','logout'],pageErrors:errors});await context.close();
  }
  console.log(JSON.stringify(results,null,2));fs.writeFileSync(path.join(root,'test-results/browser.json'),JSON.stringify(results,null,2));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
