@@ -354,10 +354,12 @@ function setSaveStatus(text,kind='pending'){
  const e=document.getElementById('saveStatus');if(e){e.textContent=text;e.className='save-status '+kind;}
 }
 function requireAdmin(){if(session?.tipo!=='admin')throw new Error('Esta ação exige acesso administrativo.');}
-function isBirthdayToday(birthDate){
- if(!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate||'')))return false;
+function studioMonthDay(){
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
- return birthDate.slice(5)===parts.find(p=>p.type==='month').value+'-'+parts.find(p=>p.type==='day').value;
+ return parts.find(p=>p.type==='month').value+'-'+parts.find(p=>p.type==='day').value;
+}
+function isBirthdayToday(birthDate){
+ return /^\d{4}-\d{2}-\d{2}$/.test(String(birthDate||''))&&birthDate.slice(5)===studioMonthDay();
 }
 function financeStatus(row){return row.pago?'pago':row._status||'em_aberto';}
 function financeCheckin(row){
@@ -811,7 +813,7 @@ financeiro:()=>{
 eventos:()=>head("Eventos","Cadastre e acompanhe eventos e espetáculos do estúdio.",`<button class="btn primary" onclick="novoEvento()">＋ Novo evento</button>`)+
  `<div class="panel"><table><tr><th>Data</th><th>Evento</th><th>Local</th><th>Status</th><th></th></tr>${db.events.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(e=>`<tr><td>${dateBR(e.data)}</td><td><strong>${esc(e.nome)}</strong></td><td>${esc(e.local||"—")}</td><td><span class="badge ${e.status==="Concluído"?"ok":"neutral"}">${esc(e.status||"Planejado")}</span></td><td><button class="btn" onclick="novoEvento(${e.id})">Abrir</button></td></tr>`).join("")||tableEmpty(5)}</table></div>`,
 aniversarios:()=>head("Aniversários e datas comemorativas","Consulte aniversários e datas comemorativas do estúdio.",`<button class="btn primary" onclick="novaComemorativa()">＋ Nova data comemorativa</button>`)+
- `<div class="panel"><h2>Aniversários cadastrados</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>s.nasc).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr class="${isBirthdayToday(s.nasc)?'birthday-today':''}"><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
+ `<div class="panel"><h2>Aniversariantes do mês</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s.nasc||''))&&s.nasc.slice(5,7)===studioMonthDay().slice(0,2)).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr class="${isBirthdayToday(s.nasc)?'birthday-today':''}"><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
  <div class="panel"><h2>Datas comemorativas</h2><table><tr><th>Data</th><th>Nome</th><th>Observação</th></tr>${commemorativesForYear(new Date().getFullYear()).slice().sort((a,b)=>a.data.localeCompare(b.data)).map(c=>`<tr><td>${dateBR(c.data)}</td><td>${esc(c.nome)}</td><td>${esc(c.obs||"—")}</td></tr>`).join("")||tableEmpty(3)}</table></div>`,
 busca:()=>head("Busca","Encontre rapidamente alunos, professores e turmas.")+
  `<div class="panel"><input id="globalSearch" class="search" placeholder="Digite nome, telefone ou turma"><div id="searchResults" style="margin-top:16px"></div></div>`,
