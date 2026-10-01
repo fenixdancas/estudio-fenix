@@ -55,7 +55,7 @@ textarea{min-height:100px;resize:vertical}.field{margin-bottom:14px}.form-grid{d
 .panel{background:#fff;border:1px solid #eadfea;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px}.panel h2{margin:0 0 15px;color:var(--violet);font:700 19px Georgia,serif}.panel h3{color:var(--violet);margin:0 0 10px}
 .section-title{display:flex;align-items:center;gap:8px;padding:10px 13px;background:linear-gradient(90deg,#f0e2f2,#fbf8fc);border-radius:11px;color:var(--violet);font-weight:800;margin:4px 0 15px}
 table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #eee7ef;text-align:left;font-size:13px;vertical-align:middle}th{color:#6c5a70;font-size:11px;text-transform:uppercase;letter-spacing:.6px}tr:hover td{background:#fcf9fd}
-.birthday-today td,.birthday-today:hover td{background:#fff0cb;color:#694500;font-weight:700}.birthday-today td:first-child{border-left:4px solid #d49a22}.birthday-today .birthday-label{display:inline-block;margin-left:8px;font-size:11px;color:#694500}
+.birthday-today td,.birthday-today:hover td{background:#fff0cb;color:#694500;font-weight:700}.birthday-today td:first-child{border-left:4px solid #d49a22}.birthday-today.birthday-reminder{background:#fff0cb;color:#694500;border-left:4px solid #d49a22;padding:10px 12px;border-radius:8px}.birthday-today .birthday-label{display:inline-block;margin-left:8px;font-size:11px;color:#694500}
 .badge{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.ok{background:#e6f2eb;color:var(--ok)}.pending{background:#fff0d7;color:var(--warn)}.bad{background:#f8e3e7;color:var(--danger)}.neutral{background:#eee8f0;color:#65596a}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:var(--muted)}.empty{padding:25px;text-align:center;color:var(--muted)}
 .search{max-width:520px}.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:15px;flex-wrap:wrap}
@@ -779,13 +779,14 @@ painel:()=>{
  const m=nowISO().slice(0,7), inc=db.payments.filter(p=>p.pago&&p.data?.startsWith(m)).reduce((a,p)=>a+Number(p.valor),0), out=db.expenses.filter(e=>e.pago&&e.data?.startsWith(m)).reduce((a,e)=>a+Number(e.valor),0);
  const pend=db.payments.filter(financePending).length;
  const next=new Date();next.setDate(1);next.setMonth(next.getMonth()+1);const nm=String(next.getMonth()+1).padStart(2,"0");
- const b=db.students.filter(s=>s.nasc?.slice(5,7)===nm).sort((a,b)=>a.nasc.localeCompare(b.nasc));
+ const birthdayMonth=studioMonthDay().slice(0,2);
+ const b=db.students.filter(s=>s.nasc?.slice(5,7)===birthdayMonth).sort((a,b)=>a.nasc.slice(8).localeCompare(b.nasc.slice(8)));
  const nextYear=next.getFullYear();const commemorativeNext=commemorativesForYear(nextYear).filter(c=>c.data?.slice(5,7)===nm).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
  const upcoming=db.expenses.filter(financePending).sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).slice(0,5);
  return head("Painel","Visão geral do estúdio.")+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
  <div class="cards"><div class="card"><div class="label">Alunos ativos</div><div class="num">${db.students.filter(s=>s.status!=="inativo").length}</div></div><div class="card"><div class="label">Entradas no mês</div><div class="num">${money(inc)}</div></div><div class="card"><div class="label">Despesas no mês</div><div class="num">${money(out)}</div></div><div class="card"><div class="label">Mensalidades pendentes</div><div class="num">${pend}</div></div></div>
- <div class="panel"><h2>Aniversários do próximo mês</h2>${b.length?b.map(s=>`<p>${esc(s.nasc.slice(8,10))}/${nm} · <strong>${esc(s.nome)}</strong></p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para o próximo mês.</p>`}</div>
+ <div class="panel"><h2>Aniversariantes do mês</h2>${b.length?b.map(s=>`<p class="birthday-reminder ${isBirthdayToday(s.nasc)?'birthday-today':''}">${esc(s.nasc.slice(8,10))}/${birthdayMonth} · <strong>${esc(s.nome)}</strong>${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para este mês.</p>`}</div>
  <div class="panel"><h2>Datas comemorativas do próximo mês</h2>${commemorativeNext.length?commemorativeNext.map(c=>`<p>${esc(c.data.slice(8,10))}/${nm} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para o próximo mês.</p>`}</div>
  <div class="panel"><h2>Próximas contas a pagar</h2><table><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr>${upcoming.map(e=>`<tr><td>${esc(e.nome)}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td>${financeBadge(e,true)}</td></tr>`).join("")||tableEmpty(4)}</table></div>`;
 },
