@@ -84,7 +84,8 @@ test('Cancelled finance stays in history without pending totals or payment actio
   t.client.tables.financeiro.push({id:`50000000-0000-4000-8000-00000000000${i}`,aluna_id:tipo==='saida'?null:ids.student,tipo,descricao:'Registro '+i,valor:150,status,vencimento:'2026-10-10'});
  try{
   await t.a.loadSupabaseDb();t.a.view='mensalidades';t.a.render();
-  assert.match(t.w.document.getElementById('page').textContent,/Cancelado/);
+  assert.doesNotMatch(t.w.document.getElementById('page').textContent,/Registro 1|Cancelado/);
+  assert.equal(t.a.db.payments.find(p=>p.comp==='Registro 1')._status,'cancelado');
   assert.match(t.w.document.getElementById('page').textContent,/Negociado/);
   assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,1);
   t.w.eval(`receber(${t.a.db.payments[0].id})`);assert.equal(t.w.document.getElementById('receiveForm'),null);
