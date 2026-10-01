@@ -55,6 +55,7 @@ textarea{min-height:100px;resize:vertical}.field{margin-bottom:14px}.form-grid{d
 .panel{background:#fff;border:1px solid #eadfea;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px}.panel h2{margin:0 0 15px;color:var(--violet);font:700 19px Georgia,serif}.panel h3{color:var(--violet);margin:0 0 10px}
 .section-title{display:flex;align-items:center;gap:8px;padding:10px 13px;background:linear-gradient(90deg,#f0e2f2,#fbf8fc);border-radius:11px;color:var(--violet);font-weight:800;margin:4px 0 15px}
 table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #eee7ef;text-align:left;font-size:13px;vertical-align:middle}th{color:#6c5a70;font-size:11px;text-transform:uppercase;letter-spacing:.6px}tr:hover td{background:#fcf9fd}
+.birthday-today td,.birthday-today:hover td{background:#fff0cb;color:#694500;font-weight:700}.birthday-today td:first-child{border-left:4px solid #d49a22}.birthday-today .birthday-label{display:inline-block;margin-left:8px;font-size:11px;color:#694500}
 .badge{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.ok{background:#e6f2eb;color:var(--ok)}.pending{background:#fff0d7;color:var(--warn)}.bad{background:#f8e3e7;color:var(--danger)}.neutral{background:#eee8f0;color:#65596a}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:var(--muted)}.empty{padding:25px;text-align:center;color:var(--muted)}
 .search{max-width:520px}.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:15px;flex-wrap:wrap}
@@ -353,6 +354,11 @@ function setSaveStatus(text,kind='pending'){
  const e=document.getElementById('saveStatus');if(e){e.textContent=text;e.className='save-status '+kind;}
 }
 function requireAdmin(){if(session?.tipo!=='admin')throw new Error('Esta ação exige acesso administrativo.');}
+function isBirthdayToday(birthDate){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate||'')))return false;
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ return birthDate.slice(5)===parts.find(p=>p.type==='month').value+'-'+parts.find(p=>p.type==='day').value;
+}
 function financeStatus(row){return row.pago?'pago':row._status||'em_aberto';}
 function financeCheckin(row){
  const student=db.students.find(s=>s.id===row.studentId);
@@ -805,7 +811,7 @@ financeiro:()=>{
 eventos:()=>head("Eventos","Cadastre e acompanhe eventos e espetáculos do estúdio.",`<button class="btn primary" onclick="novoEvento()">＋ Novo evento</button>`)+
  `<div class="panel"><table><tr><th>Data</th><th>Evento</th><th>Local</th><th>Status</th><th></th></tr>${db.events.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(e=>`<tr><td>${dateBR(e.data)}</td><td><strong>${esc(e.nome)}</strong></td><td>${esc(e.local||"—")}</td><td><span class="badge ${e.status==="Concluído"?"ok":"neutral"}">${esc(e.status||"Planejado")}</span></td><td><button class="btn" onclick="novoEvento(${e.id})">Abrir</button></td></tr>`).join("")||tableEmpty(5)}</table></div>`,
 aniversarios:()=>head("Aniversários e datas comemorativas","Consulte aniversários e datas comemorativas do estúdio.",`<button class="btn primary" onclick="novaComemorativa()">＋ Nova data comemorativa</button>`)+
- `<div class="panel"><h2>Aniversários cadastrados</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>s.nasc).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
+ `<div class="panel"><h2>Aniversários cadastrados</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>s.nasc).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr class="${isBirthdayToday(s.nasc)?'birthday-today':''}"><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
  <div class="panel"><h2>Datas comemorativas</h2><table><tr><th>Data</th><th>Nome</th><th>Observação</th></tr>${commemorativesForYear(new Date().getFullYear()).slice().sort((a,b)=>a.data.localeCompare(b.data)).map(c=>`<tr><td>${dateBR(c.data)}</td><td>${esc(c.nome)}</td><td>${esc(c.obs||"—")}</td></tr>`).join("")||tableEmpty(3)}</table></div>`,
 busca:()=>head("Busca","Encontre rapidamente alunos, professores e turmas.")+
  `<div class="panel"><input id="globalSearch" class="search" placeholder="Digite nome, telefone ou turma"><div id="searchResults" style="margin-top:16px"></div></div>`,
