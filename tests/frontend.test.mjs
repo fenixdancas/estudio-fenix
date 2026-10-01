@@ -1,6 +1,33 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {app,fixtures,fakeClient,ids,html} from './harness.mjs';
 async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
+test('Loading repairs legacy unpaid monthly enrollment dates once and preserves other charges',async()=>{
+ const client=fakeClient();Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:'2026-10-01',diaVenc:'20'});
+ for(const [i,tipo,status,date,comp] of [[1,'mensalidade','em_aberto','2026-10-01','2026-10'],[2,'mensalidade','pago','2026-10-01','2026-10'],[3,'entrada','em_aberto','2026-10-01','Matrícula · 2026-10-01'],[4,'mensalidade','negociado','2026-10-01','2026-10'],[5,'mensalidade','em_aberto','2026-10-12','2026-10'],[6,'mensalidade','em_aberto','2026-10-01','2026-09']])
+  client.tables.financeiro.push({id:`50000000-0000-4000-8000-00000000000${i}`,aluna_id:ids.student,tipo,status,vencimento:date,descricao:comp,valor:150,pago_em:status==='pago'?'2026-10-01T12:00:00-03:00':null});
+ const t=app(client);
+ try{
+  await t.a.loadSupabaseDb();assert.equal(client.tables.financeiro[0].vencimento,'2026-10-20');
+  assert.equal(t.a.db.payments[0].venc,'2026-10-20');assert.equal(t.a.pending,false);
+  assert(client.tables.financeiro.slice(1).every((r,i)=>r.vencimento===(i===3?'2026-10-12':'2026-10-01')));
+  assert.equal(client.tables.financeiro[1].pago_em,'2026-10-01T12:00:00-03:00');
+  assert(client.tables.financeiro.every(r=>r.valor===150));
+  assert.equal(client.calls.filter(c=>c.type==='rpc').length,1);
+  await t.a.loadSupabaseDb();assert.equal(client.calls.filter(c=>c.type==='rpc').length,1);
+ }finally{t.close();}
+});
+test('Failed legacy due correction never displays an unsaved corrected date and can retry',async()=>{
+ const client=fakeClient();Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:'2026-10-01',diaVenc:'10'});
+ client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',status:'em_aberto',vencimento:'2026-10-01',descricao:'2026-10',valor:150});
+ const rpc=client.rpc.bind(client);client.rpc=async()=>({error:{message:'Conflito de versão'}});
+ const t=app(client);
+ try{
+  await t.a.loadSupabaseDb();assert.equal(t.a.db.payments[0].venc,'2026-10-01');
+  assert.match(t.w.document.getElementById('saveStatus').textContent,/Não foi possível corrigir/);
+  client.rpc=rpc;await t.a.loadSupabaseDb();assert.equal(t.a.db.payments[0].venc,'2026-10-10');
+  assert.equal(client.tables.financeiro[0].status,'em_aberto');assert.equal(client.tables.financeiro[0].pago_em,null);
+ }finally{t.close();}
+});
 test('Enrollment tuition follows the selected due day while fee keeps enrollment date',async()=>{
  for(const [day,date,expected] of [['10','2026-10-01','2026-10-10'],['20','2026-10-01','2026-10-20'],['30','2026-02-01','2026-02-28'],['30','2028-02-01','2028-02-29']]){
   const t=await setup();
