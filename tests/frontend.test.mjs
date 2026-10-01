@@ -314,3 +314,18 @@ test('Public contract network errors do not claim the link is invalid',async()=>
  const t=app(client,'https://example.test/?contrato=0123456789abcdef0123456789abcdef');
  try{await t.w.eval('startContractAcceptance()');assert.match(t.w.document.body.textContent,/Não foi possível carregar/);assert.doesNotMatch(t.w.document.body.textContent,/inválido|expirou/);}finally{t.close();}
 });
+
+test('Zero check-in stays visible once without fee, payment action or pending count after reload',async()=>{
+ const client=fakeClient();client.tables.alunas[0].nome='Jaqueline';Object.assign(client.tables.alunas[0].dados_fenix,{checkin:'Wellhub',mensalidade:null,valorMatricula:'isento'});
+ for(const [i,tipo,valor] of [[1,'mensalidade',0],[2,'entrada',60]])client.tables.financeiro.push({id:`50000000-0000-4000-8000-00000000000${i}`,aluna_id:ids.student,tipo,descricao:tipo==='entrada'?'Matrícula':'2026-09',valor,status:'cancelado',vencimento:'2026-09-10'});
+ const t=app(client);try{
+  for(let i=0;i<2;i++){
+   await t.a.loadSupabaseDb();t.a.view='mensalidades';t.a.render();
+   const rows=[...t.w.document.querySelectorAll('#page tr')].filter(r=>r.textContent.includes('Jaqueline'));
+   assert.equal(rows.length,1);assert.match(rows[0].textContent,/R\$\s*0,00/);assert.match(rows[0].textContent,/Check-in · sem cobrança/);
+   assert(!rows[0].textContent.includes('60,00'));assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
+   t.a.view='painel';t.a.render();const card=[...t.w.document.querySelectorAll('.card')].find(c=>c.textContent.includes('Mensalidades pendentes'));assert.equal(card.querySelector('.num').textContent,'0');
+  }
+  assert.equal(client.calls.filter(c=>c.type==='rpc').length,0);assert.equal(client.tables.financeiro.length,2);
+ }finally{t.close();}
+});
