@@ -776,20 +776,18 @@ function tableEmpty(cols,msg="Nenhum registro cadastrado."){return `<tr><td cols
 
 const V={
 painel:()=>{
- const m=nowISO().slice(0,7), inc=db.payments.filter(p=>p.pago&&p.data?.startsWith(m)).reduce((a,p)=>a+Number(p.valor),0), out=db.expenses.filter(e=>e.pago&&e.data?.startsWith(m)).reduce((a,e)=>a+Number(e.valor),0);
- const pend=db.payments.filter(financePending).length;
  const next=new Date();next.setDate(1);next.setMonth(next.getMonth()+1);const nm=String(next.getMonth()+1).padStart(2,"0");
  const birthdayMonth=studioMonthDay().slice(0,2);
  const b=db.students.filter(s=>s.nasc?.slice(5,7)===birthdayMonth).sort((a,b)=>a.nasc.slice(8).localeCompare(b.nasc.slice(8)));
  const nextYear=next.getFullYear();const commemorativeNext=commemorativesForYear(nextYear).filter(c=>c.data?.slice(5,7)===nm).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
- const upcoming=db.expenses.filter(financePending).sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).slice(0,5);
+ const scheduled=(db.experimental||[]).filter(x=>["Agendada","Confirmada"].includes(x.status||"Agendada")&&x.data>=nowISO()).sort((a,b)=>(a.data+(a.hora||"")).localeCompare(b.data+(b.hora||"")));
  return head("Painel","Visão geral do estúdio.")+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
- <div class="cards"><div class="card"><div class="label">Alunos ativos</div><div class="num">${db.students.filter(s=>s.status!=="inativo").length}</div></div><div class="card"><div class="label">Entradas no mês</div><div class="num">${money(inc)}</div></div><div class="card"><div class="label">Despesas no mês</div><div class="num">${money(out)}</div></div><div class="card"><div class="label">Mensalidades pendentes</div><div class="num">${pend}</div></div></div>
+ <div class="panel"><h2>Aulas experimentais agendadas</h2><div class="table-wrap"><table><tr><th>Aluna(o)</th><th>Modalidade</th><th>Data</th><th>Horário</th><th>Professora</th><th>Status</th><th></th></tr>${scheduled.map(x=>`<tr><td><strong>${esc(x.nome)}</strong></td><td>${esc(x.modalidade)}</td><td>${dateBR(x.data)}</td><td>${esc(x.hora||"—")}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.nome||"—")}</td><td><span class="badge ${x.status==="Confirmada"?"ok":"pending"}">${esc(x.status||"Agendada")}</span></td><td><button class="btn" onclick="verExperimental(${x.id})">Abrir</button></td></tr>`).join("")||tableEmpty(7,"Nenhuma aula experimental agendada.")}</table></div></div>
  <div class="panel"><h2>Aniversariantes do mês</h2>${b.length?b.map(s=>`<p class="birthday-reminder ${isBirthdayToday(s.nasc)?'birthday-today':''}">${esc(s.nasc.slice(8,10))}/${birthdayMonth} · <strong>${esc(s.nome)}</strong>${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para este mês.</p>`}</div>
- <div class="panel"><h2>Datas comemorativas do próximo mês</h2>${commemorativeNext.length?commemorativeNext.map(c=>`<p>${esc(c.data.slice(8,10))}/${nm} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para o próximo mês.</p>`}</div>
- <div class="panel"><h2>Próximas contas a pagar</h2><table><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr>${upcoming.map(e=>`<tr><td>${esc(e.nome)}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td>${financeBadge(e,true)}</td></tr>`).join("")||tableEmpty(4)}</table></div>`;
+ <div class="panel"><h2>Datas comemorativas do próximo mês</h2>${commemorativeNext.length?commemorativeNext.map(c=>`<p>${esc(c.data.slice(8,10))}/${nm} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para o próximo mês.</p>`}</div>`;
 },
+
 alunos:()=>head("Alunos","Cadastros, fichas, saúde, contrato e histórico.",session?.tipo==="teacher"?"":`<button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button>`)+
  `<div class="panel"><div class="toolbar"><input id="studentSearch" class="search" placeholder="Buscar por nome ou WhatsApp"><span class="muted">${visibleStudents().length} aluno(s)</span></div><div id="studentTable"></div></div>`,
 professores:()=>head("Professores","Cadastro dos professores e classes vinculadas.",`<button class="btn primary" onclick="novoProfessor()">＋ Novo professor</button>`)+
