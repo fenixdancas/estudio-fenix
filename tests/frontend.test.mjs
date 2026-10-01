@@ -1,6 +1,66 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {app,fixtures,fakeClient,ids,html} from './harness.mjs';
 async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
+test('Consecutive new records keep both saved entries instead of replacing the first',async()=>{
+ for(const [method,formId,collection,table] of [['novaConta','expenseForm','expenses','financeiro'],['novoEvento','eventForm','events','eventos'],['novaComemorativa','commForm','commemorative','datas_comemorativas'],['novaMensalidade','payForm','payments','financeiro']]){
+  const t=await setup();
+  try{
+   for(let i=0;i<2;i++){
+    t.a[method]();const form=t.w.document.getElementById(formId);
+    if(form.elements.nome)form.elements.nome.value='Registro '+i;
+    if(form.elements.data)form.elements.data.value='2026-10-10';
+    if(form.elements.valor)form.elements.valor.value=String(150+i);
+    if(form.elements.venc)form.elements.venc.value='2026-10-10';
+    if(form.elements.comp)form.elements.comp.value=i?'2026-11':'2026-10';
+    await form.onsubmit({preventDefault(){},currentTarget:form});
+   }
+   assert.equal(t.a.db[collection].length,2,method);
+   assert.equal(t.client.tables[table].length,2,method);
+   await t.a.loadSupabaseDb();assert.equal(t.a.db[collection].length,2,method+' reload');
+  }finally{t.close();}
+ }
+});
+test('Cancelled finance stays in history without pending totals or payment actions',async()=>{
+ const t=app();
+ for(const [i,tipo,status] of [[1,'mensalidade','cancelado'],[2,'mensalidade','negociado'],[3,'saida','cancelado'],[4,'saida','negociado']])
+  t.client.tables.financeiro.push({id:`50000000-0000-4000-8000-00000000000${i}`,aluna_id:tipo==='saida'?null:ids.student,tipo,descricao:'Registro '+i,valor:150,status,vencimento:'2026-10-10'});
+ try{
+  await t.a.loadSupabaseDb();t.a.view='mensalidades';t.a.render();
+  assert.match(t.w.document.getElementById('page').textContent,/Cancelado/);
+  assert.match(t.w.document.getElementById('page').textContent,/Negociado/);
+  assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,1);
+  t.w.eval(`receber(${t.a.db.payments[0].id})`);assert.equal(t.w.document.getElementById('receiveForm'),null);
+  t.a.view='contas';t.a.render();assert.match(t.w.document.getElementById('page').textContent,/Cancelada/);
+  assert.equal(t.w.document.querySelectorAll('#page button[onclick^="pagarConta"]').length,1);
+  await t.w.eval(`pagarConta(${t.a.db.expenses[0].id})`);assert.equal(t.client.tables.financeiro[2].status,'cancelado');
+  t.a.view='painel';t.a.render();
+  const pendingCard=[...t.w.document.querySelectorAll('.card')].find(x=>x.textContent.includes('Mensalidades pendentes'));
+  assert.equal(pendingCard.querySelector('.num').textContent,'1');
+  const upcoming=[...t.w.document.querySelectorAll('.panel')].find(x=>x.textContent.includes('Próximas contas'));
+  assert(!upcoming.textContent.includes('Registro 3'));assert(upcoming.textContent.includes('Registro 4'));
+ }finally{t.close();}
+});
+test('Enrollment without a defined tuition never invents a zero-value receivable',async()=>{
+ for(const amount of [null,undefined,'','VIP']){
+  const t=await setup();
+  try{
+   const student=t.a.db.students[0];student.dataMatricula='2026-10-01';student.mensalidade=amount;student.valorMatricula='60';
+   t.w.eval(`createEnrollmentReceivables(window.testAPI.db.students[0])`);await t.a.save();
+   assert.deepEqual(t.client.tables.financeiro.map(r=>r.valor),[60]);
+  }finally{t.close();}
+ }
+});
+test('Monthly student picker sorts names and follows the selected VIP plan',async()=>{
+ const t=await setup();
+ try{
+  t.a.db.students[0].nome='Zoé';t.a.db.students[1].nome='Álvaro';t.a.db.students[1].mensalidade='VIP';
+  t.a.novaMensalidade();const form=t.w.document.getElementById('payForm');
+  assert.deepEqual([...form.elements.studentId.options].map(o=>o.textContent),['Álvaro','Zoé']);
+  assert.equal(form.elements.tipoMensalidade.value,'VIP');assert.equal(form.elements.valor.value,'');
+  form.elements.studentId.value=t.a.db.students[0].id;form.elements.studentId.onchange();
+  assert.equal(form.elements.tipoMensalidade.value,'Regular');assert.equal(form.elements.valor.value,'255');
+ }finally{t.close();}
+});
 test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,1);t.close();});
 test('Save and reload preserves health, monthly amount and observations',async()=>{const t=await setup();const s=t.a.db.students[0];s.saudeObs='Nova observação';s.mensalidade=500;s.emergNome='Contato sintético';await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,500);assert.equal(t.a.db.students[0].saudeObs,'Nova observação');assert.equal(t.a.db.students[0].emergNome,'Contato sintético');assert.equal(t.a.db.students[0].alergias,'Sim');t.close();});
 test('No hardcoded tuition when source has no amount',async()=>{const t=app();delete t.client.tables.alunas[0].dados_fenix.mensalidade;await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,null);t.close();});
