@@ -2,7 +2,7 @@
 
 ## Fonte oficial dos dados
 
-O projeto Supabase definido em `SUPABASE_CONFIG` é a fonte oficial de autenticação e dados. O projeto em `LEGACY_SUPABASE_CONFIG` existe apenas como compatibilidade temporária de autenticação e deve ser removido depois que Nahid, Tati e as professoras estiverem criadas no projeto atual.
+O projeto Supabase definido em `SUPABASE_CONFIG` é a fonte oficial de autenticação e dados. A autenticação utiliza somente esse projeto; perfis ausentes ou desconhecidos são recusados, sem consultar a base antiga.
 
 O `localStorage` é somente contingência temporária e cache do navegador. Ele não pode ser considerado banco oficial nem confirmação de que um cadastro foi salvo remotamente.
 
@@ -26,8 +26,8 @@ O `localStorage` é somente contingência temporária e cache do navegador. Ele 
 
 ## Próximas etapas estruturais
 
-1. Migrar todos os usuários para o Supabase atual.
-2. Remover a autenticação pela base antiga.
-3. Tornar falhas de sincronização visíveis na interface.
-4. Separar o HTML, os estilos e o JavaScript em arquivos próprios.
-5. Acrescentar testes de cadastro, edição, persistência e permissões.
+1. Concluir e verificar a integração do WhatsApp com o número fixo.
+2. Implementar o envio de aniversário com a Fê após ativação e aprovação do modelo.
+3. Separar o HTML, os estilos e o JavaScript em arquivos próprios.
+
+Os testes locais cobrem cadastro, edição, persistência e permissões com banco simulado e regras exportadas; não substituem a conferência autenticada do banco de produção. As falhas de sincronização são exibidas e as alterações pendentes são preservadas.
