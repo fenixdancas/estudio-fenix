@@ -21,6 +21,7 @@ function normalizePhone_(phone) {
 function whatsappPayload_(p, to, message) {
   const base = {messaging_product: "whatsapp", recipient_type: "individual", to: to};
   if (!p.template) return Object.assign(base, {type: "text", text: {preview_url: false, body: message}});
+  if (cfg_("META_EXPERIMENTAL_REPLY_READY") !== "true") throw new Error("O recebimento das respostas ainda esta em configuracao. Nenhuma mensagem foi enviada.");
   if (p.template !== "fenix_confirmacao_experimental") throw new Error("Modelo de WhatsApp nao permitido.");
   let values;
   try { values = JSON.parse(String(p.template_params || "[]")); }
