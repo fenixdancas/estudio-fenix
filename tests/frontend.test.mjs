@@ -93,10 +93,9 @@ test('Cancelled finance stays in history without pending totals or payment actio
   assert.equal(t.w.document.querySelectorAll('#page button[onclick^="pagarConta"]').length,1);
   await t.w.eval(`pagarConta(${t.a.db.expenses[0].id})`);assert.equal(t.client.tables.financeiro[2].status,'cancelado');
   t.a.view='painel';t.a.render();
-  const pendingCard=[...t.w.document.querySelectorAll('.card')].find(x=>x.textContent.includes('Mensalidades pendentes'));
-  assert.equal(pendingCard.querySelector('.num').textContent,'1');
-  const upcoming=[...t.w.document.querySelectorAll('.panel')].find(x=>x.textContent.includes('Próximas contas'));
-  assert(!upcoming.textContent.includes('Registro 3'));assert(upcoming.textContent.includes('Registro 4'));
+  assert.equal(t.a.db.payments.filter(t.w.financePending).length,1);
+  assert.equal(t.a.db.expenses.filter(t.w.financePending).length,1);
+  assert.doesNotMatch(t.w.document.getElementById('page').textContent,/Mensalidades pendentes|Próximas contas|R\$/);
  }finally{t.close();}
 });
 test('Enrollment without a defined tuition never invents a zero-value receivable',async()=>{
@@ -324,8 +323,22 @@ test('Zero check-in stays visible once without fee, payment action or pending co
    const rows=[...t.w.document.querySelectorAll('#page tr')].filter(r=>r.textContent.includes('Jaqueline'));
    assert.equal(rows.length,1);assert.match(rows[0].textContent,/R\$\s*0,00/);assert.match(rows[0].textContent,/Check-in · sem cobrança/);
    assert(!rows[0].textContent.includes('60,00'));assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
-   t.a.view='painel';t.a.render();const card=[...t.w.document.querySelectorAll('.card')].find(c=>c.textContent.includes('Mensalidades pendentes'));assert.equal(card.querySelector('.num').textContent,'0');
+   assert.equal(t.a.db.payments.filter(t.w.financePending).length,0);
   }
   assert.equal(client.calls.filter(c=>c.type==='rpc').length,0);assert.equal(client.tables.financeiro.length,2);
+ }finally{t.close();}
+});
+
+test('Manually launched zero check-in is informational before and after reload',async()=>{
+ const t=await setup();try{
+  Object.assign(t.a.db.students[0],{checkin:'Wellhub',mensalidade:0,diaVenc:'10'});
+  await t.a.save();t.a.view='mensalidades';t.a.novaMensalidade();
+  const form=t.w.document.getElementById('payForm');await form.onsubmit({preventDefault(){},currentTarget:form});
+  for(let i=0;i<2;i++){
+   if(i)await t.a.loadSupabaseDb();t.a.render();
+   assert.match(t.w.document.getElementById('page').textContent,/Check-in · sem cobrança/);
+   assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
+   assert.equal(t.a.db.payments.filter(t.w.financePending).length,0);
+  }
  }finally{t.close();}
 });
