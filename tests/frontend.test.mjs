@@ -342,3 +342,25 @@ test('Manually launched zero check-in is informational before and after reload',
   }
  }finally{t.close();}
 });
+
+test('Experimental WhatsApp sends a utility template without confirming attendance',async()=>{
+ const t=await setup();
+ try{
+  const x={id:901,nome:'Visitante',fone:'11999999999',modalidade:'Ballet',data:t.a.nowISO(),hora:'18:00',profId:t.a.db.teachers[0].id,status:'Agendada',confirmacao:''};t.a.db.experimental.push(x);
+  let payload;t.w.fetch=async(url,options)=>{payload=options.body;return {ok:true,status:200,json:async()=>({ok:true,identificador_externo:'synthetic-test-message'})};};
+  await t.w.eval('enviarExperimentalWhatsApp(901)');
+  assert.equal(payload.get('template'),'fenix_confirmacao_experimental');assert.deepEqual(JSON.parse(payload.get('template_params')),['Visitante','Ballet',t.a.nowISO().split('-').reverse().join('/'),'18:00']);
+  assert.equal(x.status,'Agendada');assert.equal(x.confirmacao,'');assert(!t.client.calls.some(c=>c.table==='aulas_experimentais'&&c.type==='update'));
+  assert.equal(t.client.tables.comunicacoes.length,1);assert.match(t.alerts.at(-1),/aguardando a resposta/);
+  t.a.session={tipo:'teacher',teacherId:ids.teacher};await assert.rejects(t.w.eval('enviarExperimentalWhatsApp(901)'),/administrativo/);
+ }finally{t.close();}
+});
+test('Experimental WhatsApp blocks duplicate in-flight sends and preserves state on rejection',async()=>{
+ const t=await setup();
+ try{
+  const x={id:902,nome:'Visitante',fone:'11999999999',modalidade:'Ballet',data:t.a.nowISO(),hora:'18:00',status:'Agendada'};t.a.db.experimental.push(x);
+  let release,count=0;t.w.fetch=()=>{count++;return new Promise(resolve=>{release=()=>resolve({ok:true,status:200,json:async()=>({ok:false,error:'Modelo em análise'})});});};
+  const first=t.w.eval('enviarExperimentalWhatsApp(902)');await new Promise(resolve=>setImmediate(resolve));await t.w.eval('enviarExperimentalWhatsApp(902)');assert.equal(count,1);release();await first;
+  assert.equal(x.status,'Agendada');assert.equal(t.client.tables.comunicacoes.length,0);assert.match(t.alerts.at(-1),/Modelo em análise/);
+ }finally{t.close();}
+});
