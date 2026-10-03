@@ -19,11 +19,13 @@ export function incomingEvents(payload) {
   if(payload?.object!=='whatsapp_business_account') throw new Error('object');
   const events=[];
   for(const entry of payload.entry || []) {
-    if(String(entry.id)!==WABA) throw new Error('account');
+    // A signed batch may contain dashboard fixtures or other subscribed assets.
+    // Acknowledge ignored assets so Meta does not keep retrying them.
+    if(String(entry.id)!==WABA) continue;
     for(const change of entry.changes || []) {
       if(change.field!=='messages') continue;
       const value=change.value;
-      if(String(value?.metadata?.phone_number_id)!==PHONE) throw new Error('phone');
+      if(String(value?.metadata?.phone_number_id)!==PHONE) continue;
       for(const m of value.messages || []) {
         if(!m.id || !/^\d{8,15}$/.test(m.from || '') || !/^\d+$/.test(m.timestamp || '')) throw new Error('message');
         const text=m.type==='text'?m.text?.body:m.type==='button'?m.button?.text:m.type==='interactive'?(m.interactive?.button_reply?.title || m.interactive?.list_reply?.title):null;
