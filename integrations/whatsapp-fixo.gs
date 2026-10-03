@@ -63,5 +63,12 @@ function vincularRecebimentoWhatsAppFenix() {
  if(result.success!==true)throw new Error("Vinculo nao confirmado pela Meta.");
  const after=metaJson_(path);
  if(!(after.data||[]).some(ours))throw new Error("Assinatura ainda nao aparece na conta.");
- Logger.log(JSON.stringify({aplicativoFenixAssinado:true,mensagensEnviadas:0}));
+  Logger.log(JSON.stringify({aplicativoFenixAssinado:true,mensagensEnviadas:0}));
+}
+function verificarRotaWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID);
+ if(waba!=="1260005122934753")throw new Error("Conta divergente.");
+ const phones=metaJson_(encodeURIComponent(waba)+"/phone_numbers?fields=id,display_phone_number");
+ const apps=metaJson_(encodeURIComponent(waba)+"/subscribed_apps");
+ Logger.log(JSON.stringify({numeroNaConta:(phones.data||[]).some(function(p){return String(p.id)==="1360494423811214";}),aplicativoNaConta:(apps.data||[]).some(function(a){return String((a.whatsapp_business_api_data||a).id)==="1519791146860663";}),rotas:(apps.data||[]).map(function(a){return a.override_callback_uri?String(a.override_callback_uri).split("?")[0]:"callback_do_aplicativo";})}));
 }
