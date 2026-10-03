@@ -13,8 +13,13 @@ test('Webhook verifies Meta challenge and refuses wrong token or missing configu
 test('Webhook accepts only signed messages and extracts a minimal incoming record',async()=>{
  let saved=[];const h=setup(async e=>saved=e);assert.equal((await h(post())).status,200);assert.equal(saved[0].content,'Confirmo');assert.equal(saved[0].event_key,'message:wamid.synthetic');assert.equal('payload' in saved[0],false);saved=[];assert.equal((await h(post(fixture(),'sha256='+'0'.repeat(64)))).status,403);assert.equal(saved.length,0);
 });
-test('Webhook refuses another business account or phone before storing',async()=>{
- let calls=0;const h=setup(async()=>calls++);for(const field of ['account','phone']){const p=fixture();if(field==='account')p.entry[0].id='other';else p.entry[0].changes[0].value.metadata.phone_number_id='other';assert.equal((await h(post(p))).status,400);}assert.equal(calls,0);
+test('Webhook acknowledges signed unrelated assets without storing them',async()=>{
+ let calls=0;const h=setup(async()=>calls++);for(const field of ['account','phone']){const p=fixture();if(field==='account')p.entry[0].id='other';else p.entry[0].changes[0].value.metadata.phone_number_id='other';assert.equal((await h(post(p))).status,200);}assert.equal(calls,0);
+});
+test('Webhook keeps the real message in a signed batch containing unrelated assets',async()=>{
+ const p=fixture(),other=fixture().entry[0];other.id='other';p.entry.unshift(other);
+ const foreign=structuredClone(p.entry[1].changes[0]);foreign.value.metadata.phone_number_id='other';p.entry[1].changes.unshift(foreign);
+ let saved=[];assert.equal((await setup(async e=>saved=e)(post(p))).status,200);assert.equal(saved.length,1);assert.equal(saved[0].message_id,'wamid.synthetic');
 });
 test('Webhook returns retryable failure if database write fails',async()=>{assert.equal((await setup(async()=>{throw new Error('offline');})(post())).status,503);});
 test('Webhook uses stable duplicate keys and preserves delivery statuses separately',()=>{
