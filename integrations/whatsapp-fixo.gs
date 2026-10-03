@@ -72,3 +72,17 @@ function verificarRotaWhatsAppFenix() {
  const apps=metaJson_(encodeURIComponent(waba)+"/subscribed_apps");
  Logger.log(JSON.stringify({numeroNaConta:(phones.data||[]).some(function(p){return String(p.id)==="1360494423811214";}),aplicativoNaConta:(apps.data||[]).some(function(a){return String((a.whatsapp_business_api_data||a).id)==="1519791146860663";}),rotas:(apps.data||[]).map(function(a){return a.override_callback_uri?String(a.override_callback_uri).split("?")[0]:"callback_do_aplicativo";})}));
 }
+function verificarWebhookAplicativoFenix() {
+ const appId=cfg_(PROP.META_APP_ID);
+ if(appId!=="1519791146860663")throw new Error("Aplicativo divergente.");
+ const response=metaJson_(appId+"/subscriptions",{headers:{Authorization:"Bearer "+appId+"|"+cfg_(PROP.META_APP_SECRET)}});
+ Logger.log(JSON.stringify({assinaturas:(response.data||[]).map(function(s){return {objeto:s.object,ativo:s.active,callbackCorreto:s.callback_url==="https://cpyhzoqcdzufjeyrssin.supabase.co/functions/v1/whatsapp-webhook",mensagens:(s.fields||[]).filter(function(f){return f.name==="messages";}).map(function(f){return {nome:f.name,versao:f.version};})};})}));
+}
+function verificarPermissaoMensagensFenix() {
+ const appId=cfg_(PROP.META_APP_ID);
+ if(appId!=="1519791146860663")throw new Error("Aplicativo divergente.");
+ let response;
+ try {response=metaJson_("debug_token?input_token="+encodeURIComponent(cfg_(PROP.META_ACCESS_TOKEN)),{headers:{Authorization:"Bearer "+appId+"|"+cfg_(PROP.META_APP_SECRET)}});} catch (_) {throw new Error("Nao foi possivel conferir a permissao de mensagens.");}
+ const d=response.data||{};
+ Logger.log(JSON.stringify({tokenValido:d.is_valid===true,aplicativoCorreto:String(d.app_id)===appId,permissaoMensagens:(d.scopes||[]).indexOf("whatsapp_business_messaging")>=0,escopoConta:(d.granular_scopes||[]).filter(function(s){return s.scope==="whatsapp_business_messaging";}).map(function(s){return {contaFenix:(s.target_ids||[]).indexOf("1260005122934753")>=0,totalAlvos:(s.target_ids||[]).length};})}));
+}
