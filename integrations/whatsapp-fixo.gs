@@ -43,3 +43,25 @@ function validarIntegracaoWhatsAppFenix() {
   const templates = metaJson_(encodeURIComponent(cfg_(PROP.META_WABA_ID)) + "/message_templates?name=fenix_confirmacao_experimental&fields=name,status,category,language");
   Logger.log(JSON.stringify({configuracao: "Meta", telefone: phone.display_phone_number, status: phone.status, verificacao: phone.code_verification_status, modelos: (templates.data || []).filter(function(t) { return t.name === "fenix_confirmacao_experimental"; }), normalizacao: "OK", mensagensEnviadas: 0}));
 }
+// Somente leitura: confirma a assinatura da conta sem enviar mensagens.
+function verificarRecebimentoWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID);
+ if(waba!=="1260005122934753")throw new Error("Conta divergente.");
+ const r=metaJson_(encodeURIComponent(waba)+"/subscribed_apps");
+ const apps=(r.data||[]).map(function(a){return a.whatsapp_business_api_data||a;});
+ const subscribed=apps.some(function(a){return String(a.id)==="1519791146860663";});
+ Logger.log(JSON.stringify({aplicativoFenixAssinado:subscribed,totalAplicativos:apps.length,mensagensEnviadas:0}));
+}
+function vincularRecebimentoWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID), appId=cfg_(PROP.META_APP_ID);
+ if(waba!=="1260005122934753"||appId!=="1519791146860663")throw new Error("Conta ou aplicativo divergente.");
+ const path=encodeURIComponent(waba)+"/subscribed_apps";
+ const before=metaJson_(path);
+ const ours=function(a){return String((a.whatsapp_business_api_data||a).id)===appId;};
+ if((before.data||[]).some(ours)){Logger.log("Aplicativo Fenix ja vinculado. Nenhuma mudanca.");return;}
+ const result=metaJson_(path,{method:"post"});
+ if(result.success!==true)throw new Error("Vinculo nao confirmado pela Meta.");
+ const after=metaJson_(path);
+ if(!(after.data||[]).some(ours))throw new Error("Assinatura ainda nao aparece na conta.");
+ Logger.log(JSON.stringify({aplicativoFenixAssinado:true,mensagensEnviadas:0}));
+}
