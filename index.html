@@ -821,6 +821,7 @@ historico:()=>head("Histórico","Registro das alterações realizadas no sistema
 config:()=>head("Configurações","Usuários, senhas e dados básicos do sistema.")+
  `<div class="panel"><h2>Acessos</h2><p class="muted">As senhas são protegidas pelo serviço de autenticação. Use “Esqueci minha senha” na entrada para redefinir seu acesso.</p></div>
  <div class="panel"><h2>WhatsApp · Coexistência</h2><p class="muted">Conecte o WhatsApp Business existente à Cloud API mantendo o número no WhatsApp Business App.</p><div class="actions"><button class="btn primary" onclick="launchMetaCoexistencia()">Conectar WhatsApp Business</button><span id="metaCoexistenciaStatus" class="small muted">Ainda não conectado nesta sessão.</span></div></div>
+ <div class="panel"><h2>Teste de envio do WhatsApp</h2><p class="muted">Envie uma mensagem de teste para um número que acabou de conversar com o WhatsApp do estúdio.</p><label for="whatsappTestPhone">Telefone com DDD</label><input id="whatsappTestPhone" type="tel" placeholder="11 99999-9999"><div class="actions"><button id="whatsappTestSend" class="btn primary" onclick="testarEnvioWhatsApp()">Enviar mensagem de teste</button></div><p id="whatsappTestResult" role="status" aria-live="polite"></p></div>
  <div class="panel"><h2>Dados</h2><p class="muted">Exporte uma cópia dos dados para guardar no Google Drive ou em outro local seguro. Cópias pendentes podem ser exportadas para recuperação sem substituir os dados atuais.</p><div class="actions"><button class="btn" onclick="exportBackup()">Exportar dados</button><button class="btn" onclick="exportPending()">Exportar cópia pendente deste aparelho</button></div></div>`
 };
 
@@ -1201,6 +1202,19 @@ async function callFenixAppsScript(action,payload={}){
   let result;try{result=await response.json();}catch{throw new Error("Resposta inválida do serviço. O envio não foi confirmado.");}
   if(result?.ok!==true)throw new Error(result?.error||"O serviço não confirmou a operação.");return result;
  }catch(error){if(error.name==='AbortError')throw new Error('O serviço demorou a responder. Confira o histórico antes de repetir o envio.');throw error;}finally{clearTimeout(timeout);}
+}
+
+
+let whatsappTestSending=false;
+async function testarEnvioWhatsApp(){
+ requireAdmin();if(whatsappTestSending)return;
+ const input=document.getElementById("whatsappTestPhone"),out=document.getElementById("whatsappTestResult"),button=document.getElementById("whatsappTestSend");
+ let phone=(input.value||"").replace(/\D/g,"");if(phone.length===10||phone.length===11)phone="55"+phone;
+ if(!/^55\d{10,11}$/.test(phone)){out.textContent="Informe um telefone brasileiro válido com DDD.";return;}
+ whatsappTestSending=true;button.disabled=true;out.textContent="Enviando teste…";
+ try{const result=await enviarWhatsAppFenix(phone,"Teste do Sistema Fênix: envio pelo WhatsApp do estúdio.",{tipo:"teste_whatsapp"});out.textContent="A Meta aceitou o envio. Confira o recebimento no WhatsApp."+ (result.identificador_externo?" Identificador: "+result.identificador_externo:"");}
+ catch(error){out.textContent=error.message||"Não foi possível confirmar o envio.";}
+ finally{whatsappTestSending=false;if(button.isConnected)button.disabled=false;}
 }
 
 async function enviarWhatsAppFenix(to,message,meta={}){
