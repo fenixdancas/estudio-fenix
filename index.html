@@ -776,16 +776,16 @@ function tableEmpty(cols,msg="Nenhum registro cadastrado."){return `<tr><td cols
 
 const V={
 painel:()=>{
- const next=new Date();next.setDate(1);next.setMonth(next.getMonth()+1);const nm=String(next.getMonth()+1).padStart(2,"0");
+ const dashboardDate=nowISO();const commemorativeMonth=dashboardDate.slice(5,7);
  const birthdayMonth=studioMonthDay().slice(0,2);
  const b=db.students.filter(s=>s.nasc?.slice(5,7)===birthdayMonth).sort((a,b)=>a.nasc.slice(8).localeCompare(b.nasc.slice(8)));
- const nextYear=next.getFullYear();const commemorativeNext=commemorativesForYear(nextYear).filter(c=>c.data?.slice(5,7)===nm).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
+ const commemorativeYear=Number(dashboardDate.slice(0,4));const commemorativeMonthDates=commemorativesForYear(commemorativeYear).filter(c=>c.data?.slice(5,7)===commemorativeMonth).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
  const scheduled=(db.experimental||[]).filter(x=>["Agendada","Confirmada"].includes(x.status||"Agendada")&&x.data>=nowISO()).sort((a,b)=>(a.data+(a.hora||"")).localeCompare(b.data+(b.hora||"")));
  return head("Painel","Visão geral do estúdio.")+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
  <div class="panel"><h2>Aulas experimentais agendadas</h2><div class="table-wrap"><table><tr><th>Aluna(o)</th><th>Modalidade</th><th>Data</th><th>Horário</th><th>Professora</th><th>Status</th><th></th></tr>${scheduled.map(x=>`<tr><td><strong>${esc(x.nome)}</strong></td><td>${esc(x.modalidade)}</td><td>${dateBR(x.data)}</td><td>${esc(x.hora||"—")}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.nome||"—")}</td><td><span class="badge ${x.status==="Confirmada"?"ok":"pending"}">${esc(x.status||"Agendada")}</span></td><td><button class="btn" onclick="verExperimental(${x.id})">Abrir</button></td></tr>`).join("")||tableEmpty(7,"Nenhuma aula experimental agendada.")}</table></div></div>
  <div class="panel"><h2>Aniversariantes do mês</h2>${b.length?b.map(s=>`<p class="birthday-reminder ${isBirthdayToday(s.nasc)?'birthday-today':''}">${esc(s.nasc.slice(8,10))}/${birthdayMonth} · <strong>${esc(s.nome)}</strong>${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para este mês.</p>`}</div>
- <div class="panel"><h2>Datas comemorativas do próximo mês</h2>${commemorativeNext.length?commemorativeNext.map(c=>`<p>${esc(c.data.slice(8,10))}/${nm} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para o próximo mês.</p>`}</div>`;
+ <div class="panel"><h2>Datas comemorativas do mês</h2>${commemorativeMonthDates.length?commemorativeMonthDates.map(c=>`<p>${esc(c.data.slice(8,10))}/${commemorativeMonth} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para este mês.</p>`}</div>`;
 },
 
 alunos:()=>head("Alunos","Cadastros, fichas, saúde, contrato e histórico.",session?.tipo==="teacher"?"":`<button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button>`)+
