@@ -1220,7 +1220,12 @@ async function testarEnvioWhatsApp(){
 async function enviarWhatsAppFenix(to,message,meta={}){
   if(!to||!message) throw new Error("Destinatário e mensagem são obrigatórios.");
   const payload={to,message};if(meta.template){payload.template=meta.template;payload.template_params=JSON.stringify(meta.templateParams||[]);}const result=await callFenixAppsScript("send_whatsapp",payload);
-  if(result?.status==="erro"||result?.ok===false) throw new Error(result.error||"Falha no WhatsApp.");
+  if(result?.status==="erro"||result?.ok===false){
+    const provider=result.resposta_provedor?.error;
+    const detail=provider?.error_user_msg||provider?.message||result.error||"A Meta não informou o motivo.";
+    const code=provider?.code;
+    throw new Error("Envio recusado: "+detail+(code!=null?" (código "+code+")":""));
+  }
   if(supabaseReady){
     const recorded=await supabaseClient.from("comunicacoes").insert({
       aluna_id:meta.aluna_id||null,
