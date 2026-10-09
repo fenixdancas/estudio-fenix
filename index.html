@@ -446,6 +446,7 @@ async function loadSupabaseDb(){
  // Commit only after every requested table loaded; never expose another user's cache.
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
+ if(admin)syncBirthdayRoster();
  // Loading is read-only: financial corrections require an explicit reviewed edit.
 }
 async function refreshSharedData({automatic=false}={}){
@@ -523,6 +524,7 @@ async function saveRecord(collection,row){
  if(!data||data.id!==id||!Number.isInteger(data.fenix_version))throw new Error('O banco não confirmou o salvamento.');
  row._version=data.fenix_version;
  if(collection==='payments'||collection==='expenses'){row._pagoEm=fields.pago_em;row._status=fields.status;}
+ if(collection==='students'&&session.tipo==='admin')birthdayRosterSignature='';
 }
 async function syncChangedData(){
  if(syncPromise)return syncPromise;
@@ -540,7 +542,7 @@ async function syncChangedData(){
  })().catch(err=>{saveLocalOnly();setSaveStatus('Não salvo: '+err.message,'bad');throw err;}).finally(()=>{syncPromise=null;});
  return syncPromise;
 }
-async function save(){saveLocalOnly();return syncChangedData();}
+async function save(){saveLocalOnly();const result=await syncChangedData();if(session?.tipo==='admin')syncBirthdayRoster();return result;}
 function log(action,detail){db.history.push({id:uid(),at:new Date().toISOString(),user:session?.nome||'Sistema',action,detail});saveLocalOnly();}
 
 function allLoginUsers(){
@@ -811,7 +813,7 @@ financeiro:()=>{
 },
 eventos:()=>head("Eventos","Cadastre e acompanhe eventos e espetáculos do estúdio.",`<button class="btn primary" onclick="novoEvento()">＋ Novo evento</button>`)+
  `<div class="panel"><table><tr><th>Data</th><th>Evento</th><th>Local</th><th>Status</th><th></th></tr>${db.events.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(e=>`<tr><td>${dateBR(e.data)}</td><td><strong>${esc(e.nome)}</strong></td><td>${esc(e.local||"—")}</td><td><span class="badge ${e.status==="Concluído"?"ok":"neutral"}">${esc(e.status||"Planejado")}</span></td><td><button class="btn" onclick="novoEvento(${e.id})">Abrir</button></td></tr>`).join("")||tableEmpty(5)}</table></div>`,
-aniversarios:()=>head("Aniversários e datas comemorativas","Consulte aniversários e datas comemorativas do estúdio.",`<button class="btn primary" onclick="novaComemorativa()">＋ Nova data comemorativa</button>`)+
+aniversarios:()=>head("Aniversários e datas comemorativas","Consulte aniversários e datas comemorativas do estúdio.",`<button class="btn primary" onclick="novaComemorativa()">＋ Nova data comemorativa</button>`)+birthdayPanel()+
  `<div class="panel"><h2>Aniversariantes do mês</h2><table><tr><th>Dia</th><th>Aluno</th><th>Data</th></tr>${db.students.filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s.nasc||''))&&s.nasc.slice(5,7)===studioMonthDay().slice(0,2)).sort((a,b)=>a.nasc.slice(5).localeCompare(b.nasc.slice(5))).map(s=>`<tr class="${isBirthdayToday(s.nasc)?'birthday-today':''}"><td>${esc(s.nasc.slice(8,10))}/${esc(s.nasc.slice(5,7))}</td><td>${esc(s.nome)}${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</td><td>${dateBR(s.nasc)}</td></tr>`).join("")||tableEmpty(3)}</table></div>
  <div class="panel"><h2>Datas comemorativas</h2><table><tr><th>Data</th><th>Nome</th><th>Observação</th></tr>${commemorativesForYear(new Date().getFullYear()).slice().sort((a,b)=>a.data.localeCompare(b.data)).map(c=>`<tr><td>${dateBR(c.data)}</td><td>${esc(c.nome)}</td><td>${esc(c.obs||"—")}</td></tr>`).join("")||tableEmpty(3)}</table></div>`,
 busca:()=>head("Busca","Encontre rapidamente alunos, professores e turmas.")+
@@ -1205,6 +1207,36 @@ async function callFenixAppsScript(action,payload={}){
 }
 
 
+// Carregada pelo HTML antes de qualquer autenticação.
+let birthdayRosterSignature='', birthdaySyncPending=null, birthdayStatusCache=null;
+function birthdayPanel(){
+ return `<div class="panel"><h2>Parabéns com a Fê</h2><p>Envio automático no dia do aniversário, entre 10h e 11h, com cópia para o WhatsApp do estúdio (11) 94032-8780.</p><div class="actions"><button class="btn" onclick="atualizarAniversariosFenix()">Atualizar envio automático</button><a class="btn" href="assets/fe-aniversario.png" target="_blank" rel="noopener">Ver imagem da Fê</a></div><p id="birthdayStatus" class="small muted" role="status">${esc(birthdayStatusText())}</p></div>`;
+}
+function birthdayStatusText(){
+ const r=birthdayStatusCache;if(!r)return 'Clique em Atualizar envio automático para conferir a configuração.';
+ const schedule=r.scheduled?'Agendamento diário ativo.':'Agendamento ainda não ativado.';
+ const template=r.template?.approved?'Modelo aprovado.':'Modelo aguardando aprovação.';
+ return `${schedule} ${template} ${r.registered||0} cadastros com data e WhatsApp.${r.last_status?' Última execução: '+r.last_status:''}`;
+}
+function showBirthdayStatus(){const out=document.getElementById('birthdayStatus');if(out)out.textContent=birthdayStatusText();}
+async function syncBirthdayRoster({force=false}={}){
+ if(session?.tipo!=='admin'||!dataLoaded||!supabaseReady)return;
+ const owner=session.authUserId||session.id;
+ const signature=JSON.stringify(db.students.map(s=>[s.id,s.nome,s.nasc,s.fone,s.status]));
+ if(birthdaySyncPending)return birthdaySyncPending;
+ if(!force&&signature===birthdayRosterSignature)return;
+ birthdaySyncPending=(async()=>{
+  const result=await callFenixAppsScript('sync_birthdays');
+  if(session?.tipo==='admin'&&(session.authUserId||session.id)===owner){birthdayRosterSignature=signature;return result;}
+ })().catch(error=>{if(force)throw error;}).finally(()=>{birthdaySyncPending=null;});
+ return birthdaySyncPending;
+}
+async function atualizarAniversariosFenix(){
+ requireAdmin();const out=document.getElementById('birthdayStatus');if(out)out.textContent='Conferindo datas e configuração…';
+ try{await syncBirthdayRoster({force:true});birthdayStatusCache=await callFenixAppsScript('birthday_status');showBirthdayStatus();}
+ catch(error){if(out?.isConnected)out.textContent='Não foi possível conferir: '+error.message;}
+}
+
 let whatsappTestSending=false;
 async function testarEnvioWhatsApp(){
  requireAdmin();if(whatsappTestSending)return;
@@ -1332,3 +1364,4 @@ window.addEventListener('unhandledrejection',e=>{e.preventDefault();setSaveStatu
 </script>
 </body>
 </html>
+
