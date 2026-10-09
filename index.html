@@ -161,6 +161,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <button data-view="turmas">♬ <span>Turmas</span></button>
       <button data-view="presenca">✓ <span>Lista de presença</span></button>
       <button data-view="experimentais">✦ <span>Aulas experimentais</span></button>
+      <button data-view="whatsapp">☏ <span>WhatsApp</span></button>
       <div class="nav-title">Gestão</div>
       <button data-view="mensalidades">▣ <span>Mensalidades</span></button>
       <button data-view="contas">▤ <span>Contas a pagar</span></button>
@@ -761,11 +762,11 @@ function visibleStudents(){
 }
 function applyAccess(){
  const teacher=session?.tipo==="teacher";
- const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];
+ const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","whatsapp","config"];
  document.querySelectorAll(".nav button[data-view]").forEach(b=>{b.style.display=allowed.includes(b.dataset.view)?"":"none"});
  if(!allowed.includes(view))view=teacher?"alunos":"painel";
 }
-function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];if(!allowed.includes(v))return;view=v;render()}
+function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","whatsapp","config"];if(!allowed.includes(v))return;view=v;render()}
 function render(){
  if(!session)return;applyAccess();
  document.querySelectorAll(".nav button[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
@@ -775,6 +776,7 @@ function head(title,sub,action=""){return `<div class="page-head"><div><h1>${tit
 function tableEmpty(cols,msg="Nenhum registro cadastrado."){return `<tr><td colspan="${cols}" class="empty">${msg}</td></tr>`}
 
 const V={
+whatsapp:()=>session?.tipo!=="admin"?"":head("WhatsApp","Respostas recebidas pelo número do estúdio.",`<button class="btn" onclick="carregarRespostasWhatsApp()">Atualizar mensagens</button>`)+`<div class="panel"><div id="whatsappInbox" role="status" aria-live="polite">Carregando mensagens…</div></div>`,
 painel:()=>{
  const dashboardDate=nowISO();const commemorativeMonth=dashboardDate.slice(5,7);
  const birthdayMonth=studioMonthDay().slice(0,2);
@@ -826,6 +828,7 @@ config:()=>head("Configurações","Usuários, senhas e dados básicos do sistema
 };
 
 function bind(){
+ if(view==="whatsapp")void carregarRespostasWhatsApp();
  if(view==="alunos"){
   const input=document.getElementById("studentSearch");
   const draw=()=>{let q=(input.value||"").toLowerCase();let a=visibleStudents().filter(s=>(s.nome+" "+(s.fone||"")+" "+(s.numeroMatricula||"")).toLowerCase().includes(q));
@@ -1188,6 +1191,32 @@ function visualizarContrato(id){
  const aceitoEm=s.contratoAceitoEm?new Date(s.contratoAceitoEm).toLocaleString("pt-BR"):"";
  openM("Contrato de prestação de serviço",`<div class="contract-header"><p><strong>Aluna:</strong> ${esc(s.nome)}</p><p><strong>E-mail:</strong> ${esc(s.email||"Não cadastrado")}</p></div><div class="contract">${esc(CONTRACT)}</div><div class="panel" style="margin-top:16px"><label class="check" style="font-size:15px"><input type="checkbox" id="contractAccept" ${aceito?"checked disabled":"disabled"}> <strong>Li, estou ciente e aceito os termos do contrato.</strong></label>${aceito?`<p data-contract-note class="small muted" style="margin-top:8px">Contrato aceito em ${esc(aceitoEm)}.</p>`:`<p data-contract-note class="small muted" style="margin-top:8px">O aceite deve ser realizado pela aluna através do link enviado por e-mail.</p>`}<div class="actions" style="margin-top:14px"><button type="button" class="btn" onclick="enviarContratoEmail(${s.id})">📧 Enviar contrato por e-mail</button>${aceito?'<span data-contract-status class="badge ok">Contrato: Aceito</span>':'<span data-contract-status></span>'}</div></div>`);
  consultarAceiteOnline(id);
+}
+let whatsappInboxRequest=0;
+async function carregarRespostasWhatsApp(){
+ requireAdmin();
+ const owner=session.authUserId||session.id,request=++whatsappInboxRequest;
+ const out=document.getElementById("whatsappInbox");
+ if(!out)return;
+ out.textContent="Carregando mensagens…";
+ try{
+  if(!supabaseReady)throw new Error("offline");
+  const {data,error}=await supabaseClient.from("whatsapp_eventos").select("event_key,phone,occurred_at,content,message_type").eq("kind","message").order("received_at",{ascending:false}).limit(100);
+  if(error)throw error;
+  if(session?.tipo!=="admin"||(session.authUserId||session.id)!==owner||request!==whatsappInboxRequest||!out.isConnected)return;
+  const phoneKey=v=>{let n=String(v||"").replace(/\D/g,"");return n.length===10||n.length===11?"55"+n:n;};
+  const messages=(data||[]).slice(0,100);
+  out.innerHTML=messages.length?'<p class="muted">Até 100 mensagens mais recentes. Atualize para conferir novas respostas.</p>'+messages.map(m=>{
+   const phone=phoneKey(m.phone),student=db.students.find(s=>phoneKey(s.fone)===phone),trial=(db.experimental||[]).find(x=>phoneKey(x.fone)===phone);
+   const name=student?.nome||trial?.nome||m.phone||"Contato";
+   const timestamp=new Date(m.occurred_at);
+   const date=Number.isNaN(timestamp.getTime())?"Data não informada":timestamp.toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"});
+   const content=m.content||"Mensagem recebida ("+(m.message_type||"outro formato")+").";
+   return `<article class="panel"><strong>${esc(name)}</strong><p class="small muted">${esc(m.phone||"")} · ${esc(date)}</p><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(content)}</p></article>`;
+  }).join(""):'<p class="muted">Nenhuma mensagem recebida ainda.</p>';
+ }catch(_){
+  if(session?.tipo==="admin"&&(session.authUserId||session.id)===owner&&request===whatsappInboxRequest&&out.isConnected)out.textContent="Não foi possível carregar as mensagens. Clique em Atualizar mensagens para tentar novamente.";
+ }
 }
 async function callFenixAppsScript(action,payload={}){
  requireAdmin();
