@@ -449,7 +449,9 @@ async function loadSupabaseDb(){
  if(admin)syncBirthdayRoster();
  // Loading is read-only: financial corrections require an explicit reviewed edit.
 }
+let lastSharedDataRefreshAt=0;
 async function refreshSharedData({automatic=false}={}){
+ if(automatic&&Date.now()-lastSharedDataRefreshAt<300000)return;
  if(!session||!dataLoaded||refreshPromise||syncPromise)return;
  if(hasPendingChanges()){
   if(!automatic)setSaveStatus('Há alterações pendentes. Salve antes de atualizar.','bad');
@@ -462,7 +464,7 @@ async function refreshSharedData({automatic=false}={}){
  if(automatic&&document.hidden)return;
  refreshPromise=(async()=>{
   setSaveStatus('Atualizando dados…');
-  try{await loadSupabaseDb();render();}
+  try{await loadSupabaseDb();lastSharedDataRefreshAt=Date.now();render();}
   catch(err){setSaveStatus('Não foi possível atualizar: '+err.message,'bad');}
  })().finally(()=>{refreshPromise=null;});
  return refreshPromise;
