@@ -468,7 +468,7 @@ async function refreshSharedData({automatic=false}={}){
  return refreshPromise;
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshSharedData({automatic:true});});
-setInterval(()=>refreshSharedData({automatic:true}),60000);
+setInterval(()=>refreshSharedData({automatic:true}),300000);
 function cleanExtra(row){const result=clone(row);for(const k of ['id','_version','senha','password','access_token','refresh_token','_tipo'])delete result[k];return result;}
 async function saveRecord(collection,row){
  const table=COLLECTIONS[collection];if(!table)throw new Error('Tipo de registro inválido.');
