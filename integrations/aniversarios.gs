@@ -77,16 +77,19 @@ function birthdayPayload_(student,to) {
 }
 function birthdaySend_(student,to,date,kind) {
   const props=props_(), key='BDAY_'+date+'_'+student.id+'_'+kind;
-  if(props.getProperty(key))return {status:'already_attempted'};
+  const previous=JSON.parse(props.getProperty(key)||'null');
+  if(previous&&previous.status!=='rejected')return {status:'already_attempted'};
+  if(previous&&(previous.attempts||1)>=3)return {status:'retry_limit'};
+  if(previous&&Date.now()-Date.parse(previous.at||0)<1800000)return {status:'retry_wait'};
   const c=whatsappConfig_();
   if(c.phoneId!=='1360494423811214')throw new Error('Número de origem divergente.');
   if(to==='551125564328')throw new Error('O destino não pode ser o número de origem.');
-  props.setProperty(key,JSON.stringify({status:'attempting',at:new Date().toISOString()}));
+  props.setProperty(key,JSON.stringify({status:'attempting',at:new Date().toISOString(),attempts:(previous?previous.attempts||1:0)+1}));
   try{
     const r=UrlFetchApp.fetch(c.url.replace(/\/+$/,'')+'/'+c.phoneId+'/messages',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+c.token},payload:JSON.stringify(birthdayPayload_(student,to)),muteHttpExceptions:true});
     const data=JSON.parse(r.getContentText()||'{}'), code=r.getResponseCode(), id=data.messages&&data.messages[0]&&data.messages[0].id;
     const result=code>=200&&code<300&&id?{status:'accepted',id:id}:{status:'rejected',code:data.error&&data.error.code||code};
-    props.setProperty(key,JSON.stringify(result));return result;
+    props.setProperty(key,JSON.stringify({...result,at:new Date().toISOString(),attempts:(previous?previous.attempts||1:0)+1}));return result;
   }catch(_){const result={status:'unknown'};props.setProperty(key,JSON.stringify(result));return result;}
 }
 function enviarAniversariosFenix() {
