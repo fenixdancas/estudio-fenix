@@ -22,7 +22,7 @@ function birthdayAdmin_(p) {
 }
 function birthdayRoster_(rows) {
   return rows.filter(function(r){return r.status==='ativo'&&/^\d{4}-\d{2}-\d{2}$/.test(r.data_nascimento||'')&&normalizePhone_(r.telefone);})
-    .map(function(r){return {id:String(r.id),name:String(r.nome||'').slice(0,120),day:r.data_nascimento.slice(5),to:normalizePhone_(r.telefone)};});
+    .map(function(r){return {id:String(r.id),name:(String((r.dados_fenix||{}).apelido||'').trim()||String(r.nome||'').trim().split(/\s+/)[0]).slice(0,120),day:r.data_nascimento.slice(5),to:normalizePhone_(r.telefone)};});
 }
 function birthdayWriteChunks_(key,data) {
   const value=JSON.stringify(data), props=props_(), count=Math.ceil(value.length/2000), old=Number(props.getProperty(key+'_count')||0);
@@ -54,7 +54,7 @@ function birthdaySync_(p) {
   birthdayAdmin_(p);
   const all=[];let offset=0;
   while(true){
-    const page=birthdayDb_(p,'/rest/v1/alunas?select=id,nome,telefone,data_nascimento,status&order=id&limit=500&offset='+offset);
+    const page=birthdayDb_(p,'/rest/v1/alunas?select=id,nome,telefone,data_nascimento,status,dados_fenix&order=id&limit=500&offset='+offset);
     all.push.apply(all,page);if(page.length<500)break;offset+=500;if(offset>10000)throw new Error('Cadastro excede o limite da rotina.');
   }
   const roster=birthdayRoster_(all), lock=LockService.getScriptLock();lock.waitLock(20000);
