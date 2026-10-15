@@ -902,6 +902,7 @@ function novaMatricula(id){
 
  <div id="etapa2" class="full section-title">② Dados pessoais da aluna</div>
  <div class="field full"><label>Nome completo *</label><input name="nome" value="${esc(s.nome)}" required></div>
+ <div class="field"><label>Apelido (opcional)</label><input name="apelido" value="${esc(s.apelido||"")}" placeholder="Como prefere ser chamada"></div>
  <div class="field full"><label>Foto da aluna</label><div class="photo-upload"><img id="studentPhotoPreview" class="photo-preview ${s.foto?"":"empty"}" src="${safePhoto(s.foto)}" alt="Foto da aluna" ${s.foto?"":"style=display:none"}><div class="photo-label"><input type="file" id="studentPhoto" accept="image/*"><span class="small muted">Opcional. A foto fica vinculada ao cadastro.</span></div></div></div>
  <div class="field"><label>Data de nascimento *</label><input type="date" name="nasc" value="${esc(s.nasc)}" required></div>
  <div class="field"><label>CPF</label><input name="cpf" value="${esc(s.cpf)}"></div>
