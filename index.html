@@ -1225,7 +1225,7 @@ function showBirthdayStatus(){const out=document.getElementById('birthdayStatus'
 async function syncBirthdayRoster({force=false}={}){
  if(session?.tipo!=='admin'||!dataLoaded||!supabaseReady)return;
  const owner=session.authUserId||session.id;
- const signature=JSON.stringify(db.students.map(s=>[s.id,s.nome,s.nasc,s.fone,s.status]));
+ const signature=JSON.stringify(db.students.map(s=>[s.id,s.nome,s.apelido||'',s.nasc,s.fone,s.status]));
  if(birthdaySyncPending)return birthdaySyncPending;
  if(!force&&signature===birthdayRosterSignature)return;
  birthdaySyncPending=(async()=>{
