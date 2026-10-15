@@ -67,7 +67,13 @@ function configurarAniversariosFenix() {
   if(!birthdayReadChunks_('BIRTHDAY_ROSTER').length)throw new Error('Sincronize primeiro as datas no Sistema Fênix.');
   const matches=ScriptApp.getProjectTriggers().filter(function(t){return t.getHandlerFunction()==='enviarAniversariosFenix';});
   if(!matches.length)ScriptApp.newTrigger('enviarAniversariosFenix').timeBased().everyDays(1).atHour(FENIX_BIRTHDAY.hour).inTimezone(FENIX_BIRTHDAY.timezone).create();
+  const retry=ScriptApp.getProjectTriggers().filter(function(t){return t.getHandlerFunction()==='revisarAniversariosFenix';});
+  if(!retry.length)ScriptApp.newTrigger('revisarAniversariosFenix').timeBased().everyHours(1).create();
   Logger.log(JSON.stringify(birthdayStatus_()));
+}
+function revisarAniversariosFenix(){
+  const hour=Number(Utilities.formatDate(new Date(),FENIX_BIRTHDAY.timezone,'H'));
+  if(hour>=11&&hour<=18)enviarAniversariosFenix();
 }
 function birthdayPayload_(student,to) {
   return {messaging_product:'whatsapp',recipient_type:'individual',to:to,type:'template',template:{name:FENIX_BIRTHDAY.template,language:{code:FENIX_BIRTHDAY.language},components:[
