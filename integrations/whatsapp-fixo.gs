@@ -21,6 +21,7 @@ function normalizePhone_(phone) {
 function whatsappPayload_(p, to, message) {
   const base = {messaging_product: "whatsapp", recipient_type: "individual", to: to};
   if (!p.template) return Object.assign(base, {type: "text", text: {preview_url: false, body: message}});
+  if (cfg_("META_EXPERIMENTAL_REPLY_READY") !== "true") throw new Error("O recebimento das respostas ainda esta em configuracao. Nenhuma mensagem foi enviada.");
   if (p.template !== "fenix_confirmacao_experimental") throw new Error("Modelo de WhatsApp nao permitido.");
   let values;
   try { values = JSON.parse(String(p.template_params || "[]")); }
@@ -41,4 +42,11 @@ function validarIntegracaoWhatsAppFenix() {
   const phone = metaJson_(encodeURIComponent(c.phoneId) + "?fields=display_phone_number,status,code_verification_status");
   const templates = metaJson_(encodeURIComponent(cfg_(PROP.META_WABA_ID)) + "/message_templates?name=fenix_confirmacao_experimental&fields=name,status,category,language");
   Logger.log(JSON.stringify({configuracao: "Meta", telefone: phone.display_phone_number, status: phone.status, verificacao: phone.code_verification_status, modelos: (templates.data || []).filter(function(t) { return t.name === "fenix_confirmacao_experimental"; }), normalizacao: "OK", mensagensEnviadas: 0}));
+}
+
+// Habilitar somente apos aplicar 202610160001 e publicar whatsapp-webhook.
+function habilitarRespostasExperimentaisFenix() {
+ if (cfg_(PROP.META_PHONE_NUMBER_ID) !== "1360494423811214" || cfg_(PROP.META_WABA_ID) !== "1260005122934753") throw new Error("Conta divergente.");
+ props_().setProperty("META_EXPERIMENTAL_REPLY_READY", "true");
+ Logger.log(JSON.stringify({respostasExperimentais:"habilitadas",mensagensEnviadas:0}));
 }
