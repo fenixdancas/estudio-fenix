@@ -21,6 +21,7 @@ function normalizePhone_(phone) {
 function whatsappPayload_(p, to, message) {
   const base = {messaging_product: "whatsapp", recipient_type: "individual", to: to};
   if (!p.template) return Object.assign(base, {type: "text", text: {preview_url: false, body: message}});
+  if (cfg_("META_EXPERIMENTAL_REPLY_READY") !== "true") throw new Error("O recebimento das respostas ainda esta em configuracao. Nenhuma mensagem foi enviada.");
   if (p.template !== "fenix_confirmacao_experimental") throw new Error("Modelo de WhatsApp nao permitido.");
   let values;
   try { values = JSON.parse(String(p.template_params || "[]")); }
@@ -41,4 +42,47 @@ function validarIntegracaoWhatsAppFenix() {
   const phone = metaJson_(encodeURIComponent(c.phoneId) + "?fields=display_phone_number,status,code_verification_status");
   const templates = metaJson_(encodeURIComponent(cfg_(PROP.META_WABA_ID)) + "/message_templates?name=fenix_confirmacao_experimental&fields=name,status,category,language");
   Logger.log(JSON.stringify({configuracao: "Meta", telefone: phone.display_phone_number, status: phone.status, verificacao: phone.code_verification_status, modelos: (templates.data || []).filter(function(t) { return t.name === "fenix_confirmacao_experimental"; }), normalizacao: "OK", mensagensEnviadas: 0}));
+}
+// Somente leitura: confirma a assinatura da conta sem enviar mensagens.
+function verificarRecebimentoWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID);
+ if(waba!=="1260005122934753")throw new Error("Conta divergente.");
+ const r=metaJson_(encodeURIComponent(waba)+"/subscribed_apps");
+ const apps=(r.data||[]).map(function(a){return a.whatsapp_business_api_data||a;});
+ const subscribed=apps.some(function(a){return String(a.id)==="1519791146860663";});
+ Logger.log(JSON.stringify({aplicativoFenixAssinado:subscribed,totalAplicativos:apps.length,mensagensEnviadas:0}));
+}
+function vincularRecebimentoWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID), appId=cfg_(PROP.META_APP_ID);
+ if(waba!=="1260005122934753"||appId!=="1519791146860663")throw new Error("Conta ou aplicativo divergente.");
+ const path=encodeURIComponent(waba)+"/subscribed_apps";
+ const before=metaJson_(path);
+ const ours=function(a){return String((a.whatsapp_business_api_data||a).id)===appId;};
+ if((before.data||[]).some(ours)){Logger.log("Aplicativo Fenix ja vinculado. Nenhuma mudanca.");return;}
+ const result=metaJson_(path,{method:"post"});
+ if(result.success!==true)throw new Error("Vinculo nao confirmado pela Meta.");
+ const after=metaJson_(path);
+ if(!(after.data||[]).some(ours))throw new Error("Assinatura ainda nao aparece na conta.");
+  Logger.log(JSON.stringify({aplicativoFenixAssinado:true,mensagensEnviadas:0}));
+}
+function verificarRotaWhatsAppFenix() {
+ const waba=cfg_(PROP.META_WABA_ID);
+ if(waba!=="1260005122934753")throw new Error("Conta divergente.");
+ const phones=metaJson_(encodeURIComponent(waba)+"/phone_numbers?fields=id,display_phone_number");
+ const apps=metaJson_(encodeURIComponent(waba)+"/subscribed_apps");
+ Logger.log(JSON.stringify({numeroNaConta:(phones.data||[]).some(function(p){return String(p.id)==="1360494423811214";}),aplicativoNaConta:(apps.data||[]).some(function(a){return String((a.whatsapp_business_api_data||a).id)==="1519791146860663";}),rotas:(apps.data||[]).map(function(a){return a.override_callback_uri?String(a.override_callback_uri).split("?")[0]:"callback_do_aplicativo";})}));
+}
+function verificarWebhookAplicativoFenix() {
+ const appId=cfg_(PROP.META_APP_ID);
+ if(appId!=="1519791146860663")throw new Error("Aplicativo divergente.");
+ const response=metaJson_(appId+"/subscriptions",{headers:{Authorization:"Bearer "+appId+"|"+cfg_(PROP.META_APP_SECRET)}});
+ Logger.log(JSON.stringify({assinaturas:(response.data||[]).map(function(s){return {objeto:s.object,ativo:s.active,callbackCorreto:s.callback_url==="https://cpyhzoqcdzufjeyrssin.supabase.co/functions/v1/whatsapp-webhook",mensagens:(s.fields||[]).filter(function(f){return f.name==="messages";}).map(function(f){return {nome:f.name,versao:f.version};})};})}));
+}
+function verificarPermissaoMensagensFenix() {
+ const appId=cfg_(PROP.META_APP_ID);
+ if(appId!=="1519791146860663")throw new Error("Aplicativo divergente.");
+ let response;
+ try {response=metaJson_("debug_token?input_token="+encodeURIComponent(cfg_(PROP.META_ACCESS_TOKEN)),{headers:{Authorization:"Bearer "+appId+"|"+cfg_(PROP.META_APP_SECRET)}});} catch (_) {throw new Error("Nao foi possivel conferir a permissao de mensagens.");}
+ const d=response.data||{};
+ Logger.log(JSON.stringify({tokenValido:d.is_valid===true,aplicativoCorreto:String(d.app_id)===appId,permissaoMensagens:(d.scopes||[]).indexOf("whatsapp_business_messaging")>=0,escopoConta:(d.granular_scopes||[]).filter(function(s){return s.scope==="whatsapp_business_messaging";}).map(function(s){return {contaFenix:(s.target_ids||[]).indexOf("1260005122934753")>=0,totalAlvos:(s.target_ids||[]).length};})}));
 }

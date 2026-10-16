@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 const source=fs.readFileSync(new URL('../integrations/whatsapp-fixo.gs',import.meta.url),'utf8');
 function backend(status='APPROVED',category='UTILITY',language='pt_BR'){
- const values={META_ACCESS_TOKEN:'synthetic-test-token',META_PHONE_NUMBER_ID:'1360494423811214',META_WABA_ID:'1260005122934753'};
+ const values={META_ACCESS_TOKEN:'synthetic-test-token',META_PHONE_NUMBER_ID:'1360494423811214',META_WABA_ID:'1260005122934753',META_EXPERIMENTAL_REPLY_READY:'true'};
  const context=vm.createContext({PROP:new Proxy({},{get:(_,key)=>key}),cfg_:key=>values[key]||'',graphVersion_:()=> 'v25.0',metaJson_:()=>({data:[{name:'fenix_confirmacao_experimental',status,category,language}]})});vm.runInContext(source,context);return {context,values};
 }
 const request={template:'fenix_confirmacao_experimental',template_params:JSON.stringify(['Maria','Ballet','15/10/2026','18:00'])};
@@ -19,4 +19,8 @@ test('Backend blocks unapproved, marketing or different-language template before
 });
 test('Backend blocks arbitrary template, malformed parameters and different account',()=>{
  const {context:c,values}=backend();assert.throws(()=>c.whatsappPayload_({...request,template:'other'},'5511999999999','test'),/nao permitido/);assert.throws(()=>c.whatsappPayload_({...request,template_params:'[]'},'5511999999999','test'),/quatro parametros/);values.META_WABA_ID='other';assert.throws(()=>c.whatsappPayload_(request,'5511999999999','test'),/divergente/);
+});
+
+test('Backend blocks experimental template until incoming replies are validated',()=>{
+ const {context:c,values}=backend();for(const value of ['', 'false', 'TRUE']){values.META_EXPERIMENTAL_REPLY_READY=value;assert.throws(()=>c.whatsappPayload_(request,'5511999999999','test'),/recebimento das respostas/);}
 });
