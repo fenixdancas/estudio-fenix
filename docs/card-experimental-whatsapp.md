@@ -1,6 +1,10 @@
 # Card da Fê no WhatsApp
 
-Implementação preparada; publicação no Apps Script e aprovação na Meta ainda não verificadas.
+Serviço atualizado na implantação existente: versão 26, publicada em 21/10/2026. Compatibilidade com `card_base64` conferida no código completo do Apps Script.
+
+Modelo `fenix_confirmacao_experimental_card` criado na Meta com cabeçalho de imagem e categoria solicitada `UTILITY`. Última consulta em 21/10/2026, 18:22 (São Paulo): `PENDING`, imagem presente, nenhuma mensagem enviada.
+
+O frontend desta branch ainda não foi publicado: aguardar aprovação e realizar teste com destinatário escolhido pela administradora.
 Não publicar o frontend desta alteração antes das verificações abaixo. O frontend atual continua usando o modelo de texto.
 
 ## Modelo separado na Meta
@@ -28,3 +32,4 @@ O navegador gera o JPEG a partir dos dados atuais da aula e o envia apenas ao Ap
 
 `npm run validate`, `npm test` e `npm run test:ui`.
 Os testes usam dados fictícios e APIs simuladas; não comprovam implantação ou aprovação na conta Meta.
+
