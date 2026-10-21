@@ -22,3 +22,33 @@ test('Backend blocks arbitrary template, malformed parameters and different acco
 });
 
 test('Backend keeps experimental sends blocked until response processing is enabled',()=>{const {context:c,values}=backend();values.META_EXPERIMENTAL_REPLY_READY='';assert.throws(()=>c.whatsappPayload_(request,'5511999999999','test'),/recebimento das respostas/);});
+
+function cardBackend({status='APPROVED',header=true,code=200,mediaId='123456'}={}){
+ const t=backend(status);const uploads=[];
+ t.context.metaJson_=()=>({data:[{name:'fenix_confirmacao_experimental_card',status,category:'UTILITY',language:'pt_BR',components:header?[{type:'HEADER',format:'IMAGE'}]:[]}]});
+ t.context.Utilities={base64Decode:v=>[...Buffer.from(v,'base64')],newBlob:(bytes,type,name)=>({bytes,type,name})};
+ t.context.UrlFetchApp={fetch:(url,options)=>{uploads.push({url,options});return {getResponseCode:()=>code,getContentText:()=>JSON.stringify({id:mediaId})}}};
+ return {...t,uploads};
+}
+const cardRequest={...request,template:'fenix_confirmacao_experimental_card',card_base64:Buffer.from([255,216,255,217]).toString('base64')};
+test('Experimental card uploads privately and supplies its media id in the template header',()=>{
+ const {context:c,uploads}=cardBackend();const payload=c.whatsappPayload_(cardRequest,'5511999999999','test');
+ assert.equal(uploads.length,1);assert.equal(uploads[0].url,'https://graph.facebook.com/v25.0/1360494423811214/media');
+ assert.equal(uploads[0].options.payload.file.type,'image/jpeg');
+ assert.equal(payload.template.components[0].parameters[0].image.id,'123456');assert.equal(payload.template.components[1].parameters.length,4);
+});
+test('Pending or text-only templates and invalid JPEGs never upload or fall back to text',()=>{
+ for(const options of [{status:'PENDING'},{header:false},{}]){
+  const {context:c,uploads}=cardBackend(options);
+  assert.throws(()=>c.whatsappPayload_(options.status||options.header===false?cardRequest:{...cardRequest,card_base64:'not-an-image'},'5511999999999','test'));
+  assert.equal(uploads.length,0);
+ }
+});
+test('Media rejection or unknown response prevents creating a message payload',()=>{
+ for(const options of [{code:400},{mediaId:''}]){
+  const {context:c}=cardBackend(options);assert.throws(()=>c.whatsappPayload_(cardRequest,'5511999999999','test'),/Nenhuma mensagem foi enviada/);
+ }
+});
+test('Experimental card refuses a different source number',()=>{
+ const {context:c,values,uploads}=cardBackend();values.META_PHONE_NUMBER_ID='other';assert.throws(()=>c.whatsappPayload_(cardRequest,'5511999999999','test'),/divergente/);assert.equal(uploads.length,0);
+});
