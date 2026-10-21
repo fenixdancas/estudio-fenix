@@ -1148,7 +1148,7 @@ async function enviarExperimentalWhatsApp(id){
  const params=[String(x.nome||""),String(x.modalidade||""),dateBR(x.data),String(x.hora||"")];
  const message=`Olá, ${params[0]}! Sua aula experimental de ${params[1]} no Estúdio de Danças Fênix está agendada para ${params[2]}, às ${params[3]}. Você confirma sua presença? Responda por aqui para confirmar ou solicitar reagendamento.`;
  experimentalWhatsAppEmEnvio.add(id);render();
- try{await enviarWhatsAppFenix(x.fone,message,{tipo:"aula_experimental",template:"fenix_confirmacao_experimental",templateParams:params,experimental_id:remoteForLocal("aulas_experimentais",x.id)});alert("A Meta aceitou o pedido de confirmação. A presença continua aguardando a resposta da aluna. Para confirmar, a aluna pode responder Confirmo. Para reagendar, pode responder Reagendar. Se houver mais de um pedido, deve usar Responder na mensagem da aula.");}
+ try{const card=await gerarCardExperimental(x);await enviarWhatsAppFenix(x.fone,message,{tipo:"aula_experimental",template:"fenix_confirmacao_experimental_card",cardBase64:card.split(",")[1],templateParams:params,experimental_id:remoteForLocal("aulas_experimentais",x.id)});alert("A Meta aceitou o pedido de confirmação. A presença continua aguardando a resposta da aluna. Para confirmar, a aluna pode responder Confirmo. Para reagendar, pode responder Reagendar. Se houver mais de um pedido, deve usar Responder na mensagem da aula.");}
  catch(err){alert("Não foi possível concluir: "+err.message);}
  finally{experimentalWhatsAppEmEnvio.delete(id);render();}
 }
@@ -1313,7 +1313,7 @@ async function testarEnvioWhatsApp(){
 async function enviarWhatsAppFenix(to,message,meta={}){
   if(!to||!message) throw new Error("Destinatário e mensagem são obrigatórios.");
   to=normalizeWhatsAppPhone(to);if(!to)throw new Error("Telefone inválido.");
-  const payload={to,message};if(meta.template){payload.template=meta.template;payload.template_params=JSON.stringify(meta.templateParams||[]);}const result=await callFenixAppsScript("send_whatsapp",payload);
+  const payload={to,message};if(meta.template){payload.template=meta.template;payload.template_params=JSON.stringify(meta.templateParams||[]);if(meta.cardBase64)payload.card_base64=meta.cardBase64;}const result=await callFenixAppsScript("send_whatsapp",payload);
   if(result?.status==="erro"||result?.ok===false){
     const provider=result.resposta_provedor?.error;
     const detail=provider?.error_user_msg||provider?.message||result.error||"A Meta não informou o motivo.";

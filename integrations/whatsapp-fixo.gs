@@ -22,17 +22,26 @@ function whatsappPayload_(p, to, message) {
   const base = {messaging_product: "whatsapp", recipient_type: "individual", to: to};
   if (!p.template) return Object.assign(base, {type: "text", text: {preview_url: false, body: message}});
   if (cfg_("META_EXPERIMENTAL_REPLY_READY") !== "true") throw new Error("O recebimento das respostas ainda esta em configuracao. Nenhuma mensagem foi enviada.");
-  if (p.template !== "fenix_confirmacao_experimental") throw new Error("Modelo de WhatsApp nao permitido.");
+  const withCard = p.template === "fenix_confirmacao_experimental_card";
+  if (p.template !== "fenix_confirmacao_experimental" && !withCard) throw new Error("Modelo de WhatsApp nao permitido.");
   let values;
   try { values = JSON.parse(String(p.template_params || "[]")); }
   catch (_) { throw new Error("Parametros do modelo invalidos."); }
   if (!Array.isArray(values) || values.length !== 4 || values.some(function(v) { return typeof v !== "string" || !v.trim() || v.length > 1024 || /[\r\n\t]/.test(v); })) throw new Error("Informe os quatro parametros validos da aula experimental.");
   const waba = cfg_(PROP.META_WABA_ID);
   if (waba !== "1260005122934753") throw new Error("Conta WhatsApp divergente: envio bloqueado.");
-  const result = metaJson_(encodeURIComponent(waba) + "/message_templates?name=" + encodeURIComponent(p.template) + "&fields=name,status,category,language");
-  const approved = (result.data || []).some(function(t) { return t.name === p.template && t.language === "pt_BR" && t.status === "APPROVED" && t.category === "UTILITY"; });
+  const result = metaJson_(encodeURIComponent(waba) + "/message_templates?name=" + encodeURIComponent(p.template) + "&fields=name,status,category,language,components");
+  const approved = (result.data || []).find(function(t) { return t.name === p.template && t.language === "pt_BR" && t.status === "APPROVED" && t.category === "UTILITY"; });
   if (!approved) throw new Error("A Meta ainda nao aprovou este modelo como Utilidade. Nenhuma mensagem foi enviada.");
-  return Object.assign(base, {type: "template", template: {name: p.template, language: {code: "pt_BR"}, components: [{type: "body", parameters: values.map(function(v) { return {type: "text", text: v.trim()}; })}]}});
+  const components = [{type: "body", parameters: values.map(function(v) { return {type: "text", text: v.trim()}; })}];
+  if (withCard) {
+    if (!(approved.components || []).some(function(c) { return c.type === "HEADER" && c.format === "IMAGE"; })) throw new Error("O modelo aprovado nao possui cabecalho de imagem. Nenhuma mensagem foi enviada.");
+    const mediaId = experimentalCardUpload_(p.card_base64);
+    components.unshift({type: "header", parameters: [{type: "image", image: {id: mediaId}}]});
+  } else if (p.card_base64) {
+    throw new Error("O card exige o modelo com imagem. Nenhuma mensagem foi enviada.");
+  }
+  return Object.assign(base, {type: "template", template: {name: p.template, language: {code: "pt_BR"}, components: components}});
 }
 // Diagnostico somente leitura: nunca chama /messages nem /register.
 function validarIntegracaoWhatsAppFenix() {
@@ -49,4 +58,35 @@ function habilitarRespostasExperimentaisFenix() {
  if (cfg_(PROP.META_PHONE_NUMBER_ID) !== "1360494423811214" || cfg_(PROP.META_WABA_ID) !== "1260005122934753") throw new Error("Conta divergente.");
  props_().setProperty("META_EXPERIMENTAL_REPLY_READY", "true");
  Logger.log(JSON.stringify({respostasExperimentais:"habilitadas",mensagensEnviadas:0}));
+}
+
+// Chamado somente depois de validar conta, parametros e aprovacao do modelo.
+// O JPEG fica na Meta; nao e publicado no Drive ou no GitHub.
+function experimentalCardUpload_(encoded) {
+  if (typeof encoded !== "string" || !encoded || encoded.length > 6990508 || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new Error("Card JPEG invalido. Nenhuma mensagem foi enviada.");
+  const bytes = Utilities.base64Decode(encoded);
+  if (bytes.length > 5 * 1024 * 1024 || bytes.length < 4 || (bytes[0] & 255) !== 255 || (bytes[1] & 255) !== 216 || (bytes[bytes.length-2] & 255) !== 255 || (bytes[bytes.length-1] & 255) !== 217) throw new Error("Card JPEG invalido. Nenhuma mensagem foi enviada.");
+  const c = whatsappConfig_();
+  if (c.phoneId !== "1360494423811214") throw new Error("Numero de origem divergente.");
+  const response = UrlFetchApp.fetch(c.url.replace(/\/+$/, "") + "/" + c.phoneId + "/media", {
+    method: "post", headers: {Authorization: "Bearer " + c.token}, muteHttpExceptions: true,
+    payload: {messaging_product: "whatsapp", type: "image/jpeg", file: Utilities.newBlob(bytes, "image/jpeg", "aula-experimental.jpg")}
+  });
+  let data;
+  try { data = JSON.parse(response.getContentText() || "{}"); } catch (_) { throw new Error("A Meta nao confirmou o carregamento do card. Nenhuma mensagem foi enviada."); }
+  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300 || !/^\d+$/.test(String(data.id || ""))) throw new Error("A Meta recusou o carregamento do card. Nenhuma mensagem foi enviada.");
+  return String(data.id);
+}
+
+// Executar no Apps Script antes de publicar o frontend. Nao envia mensagens.
+function validarCardExperimentalFenix() {
+  const c = whatsappConfig_();
+  if (c.phoneId !== "1360494423811214" || cfg_(PROP.META_WABA_ID) !== "1260005122934753") throw new Error("Conta divergente.");
+  const result = metaJson_("1260005122934753/message_templates?name=fenix_confirmacao_experimental_card&fields=name,status,category,language,components");
+  const model = (result.data || []).find(function(t) { return t.name === "fenix_confirmacao_experimental_card" && t.language === "pt_BR"; });
+  const hasImage = !!model && (model.components || []).some(function(c) { return c.type === "HEADER" && c.format === "IMAGE"; });
+  const ready = !!model && model.status === "APPROVED" && model.category === "UTILITY" && hasImage;
+  Logger.log(JSON.stringify({modelo: "fenix_confirmacao_experimental_card", status: model ? model.status : "NOT_CREATED", imagem: hasImage, pronto: ready, mensagensEnviadas: 0}));
+  if (!ready) throw new Error("Modelo com imagem ainda nao esta aprovado como Utilidade.");
+  return true;
 }
