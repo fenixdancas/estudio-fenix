@@ -379,10 +379,31 @@ function safePhoto(value){
  try{const u=new URL(s,location.href);if(u.protocol==='https:'||u.origin===location.origin)return esc(u.href);}catch{}
  return '';
 }
+// Cache is recovery only: synced rows, photos and history remain in Supabase.
+let pendingRecoveryCache=null;
+function localRecoverySnapshot(){
+ const changes={};
+ for(const collection of Object.keys(COLLECTIONS))changes[collection]=(db[collection]||[]).filter(row=>baseline[collection+':'+row.id]!==JSON.stringify(row));
+ return {schemaVersion:2,partial:true,db:changes,remoteIds,pending:Object.values(changes).some(rows=>rows.length>0)};
+}
+function preservePendingRecovery(cached){
+ if(!cached?.pending)return true;
+ pendingRecoveryCache={owner:cacheOwner,value:cached};
+ try{localStorage.setItem(KEY+':pending:'+cacheOwner,JSON.stringify(cached));return true;}
+ catch{return false;}
+}
 function saveLocalOnly(){
- if(!cacheOwner)return;
- try{localStorage.setItem(KEY+':'+cacheOwner,JSON.stringify({db,remoteIds,pending:hasPendingChanges()}));}
- catch{setSaveStatus('Não foi possível guardar a cópia neste aparelho. Exporte os dados antes de sair.','bad');}
+ if(!cacheOwner)return false;
+ const snapshot=localRecoverySnapshot();
+ try{
+  // Never replace an older unsaved copy if its separate recovery copy failed.
+  if(pendingRecoveryCache?.owner===cacheOwner){
+   localStorage.setItem(KEY+':pending:'+cacheOwner,JSON.stringify(pendingRecoveryCache.value));
+  }
+  localStorage.setItem(KEY+':'+cacheOwner,JSON.stringify(snapshot));return true;
+ }catch{
+  setSaveStatus(snapshot.pending||pendingRecoveryCache?.owner===cacheOwner?'Há alterações sem cópia neste aparelho. Exporte os dados antes de sair.':'Cópia local indisponível neste aparelho. Os dados carregados continuam no banco.',snapshot.pending?'bad':'pending');return false;
+ }
 }
 function preservePreviousCache(){
  // The legacy cache is optional. A full browser store must never block authentication.
@@ -626,13 +647,14 @@ async function renderLogin(){
       cacheOwner=data.user.id;
       preservePreviousCache();
       const cached=safeRead(KEY+':'+cacheOwner,null);
+      pendingRecoveryCache=null;preservePendingRecovery(cached);
       remoteIds=cached?.remoteIds||{};
       await loadSupabaseDb();
       // Legacy browser data is retained only as an explicit backup. Never merge it automatically.
       if(session.tipo==='teacher'&&!db.teachers.some(t=>remoteForLocal('professoras',t.id)===session.teacherId&&t.acessoAtivo))throw new Error('O cadastro da professora está desativado ou sem vínculo.');
       if(cached?.pending){
         // Keep the pending version for explicit, reviewed recovery. Never silently merge stale rows.
-        localStorage.setItem(KEY+':pending:'+cacheOwner,JSON.stringify(cached));
+        preservePendingRecovery(cached);
         setSaveStatus('Existe uma cópia com alterações pendentes neste aparelho. Exporte-a em Configurações.','pending');
       }
     if(remember.checked)localStorage.setItem("fenix_remember_me",JSON.stringify({user:u.id}));else localStorage.removeItem("fenix_remember_me");
@@ -1456,7 +1478,7 @@ async function consultarAceiteOnline(id){
 function savePasswords(){alert("As senhas são administradas pelo Supabase Auth. Use a recuperação de senha para alterar o acesso.")}
 function exportBackup(){requireAdmin();downloadJson({schemaVersion:1,exportedAt:new Date().toISOString(),db,remoteIds},"backup_estudio_fenix.json");}
 function downloadJson(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function exportPending(){requireAdmin();const stored=safeRead(KEY+':pending:'+cacheOwner,null)||safeRead(KEY+':pre-audit',null);if(!stored){alert('Não há cópia pendente neste aparelho.');return;}downloadJson(stored,'fenix_dados_pendentes.json');}
+function exportPending(){requireAdmin();const stored=(pendingRecoveryCache?.owner===cacheOwner?pendingRecoveryCache.value:null)||safeRead(KEY+':pending:'+cacheOwner,null)||safeRead(KEY+':pre-audit',null);if(!stored){alert('Não há cópia pendente neste aparelho.');return;}downloadJson(stored,'fenix_dados_pendentes.json');}
 function importBackup(){requireAdmin();alert("A restauração exige conferir os vínculos com os dados atuais para evitar duplicações. Nenhum dado foi alterado.");}
 document.addEventListener('keydown',e=>{
  const box=document.getElementById('modalbox');if(!document.getElementById('modal')?.classList.contains('open'))return;
