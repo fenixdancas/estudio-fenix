@@ -34,8 +34,22 @@ try{
   await page.locator('button[data-view="alunos"]').click();
   await page.screenshot({path:path.join(root,`test-results/alunas-${viewport.width}.png`),fullPage:true});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,'No page-wide horizontal overflow');
+  await page.locator('button[data-view="financeiro"]').click();
+  await page.getByRole('button',{name:'＋ Outros recebimentos',exact:true}).click();
+  await page.locator('#otherReceiptForm [name="valor"]').fill('237.45');
+  await page.locator('#otherReceiptForm [name="comp"]').fill('Repasse de teste');
+  await page.locator('#otherReceiptForm [name="forma"]').selectOption('Transferência');
+  await page.getByRole('button',{name:'Salvar recebimento',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  assert(await page.getByText('Repasse de teste',{exact:true}).isVisible());
+  await page.screenshot({path:path.join(root,`test-results/outros-recebimentos-${viewport.width}.png`),fullPage:true});
+  await page.locator('button[data-view="alunos"]').click();await page.getByRole('button',{name:'Abrir ficha',exact:true}).first().click();
+  await page.getByRole('button',{name:'Excluir matrícula',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#studentTable').getByText('Aluna A',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'Matrículas excluídas',exact:true}).click();
+  await page.getByRole('button',{name:'Restaurar matrícula',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  assert(await page.locator('#studentTable').getByText('Aluna A',{exact:true}).isVisible());
   await page.locator('#logoutBtn').click();await page.locator('#loginScreen').waitFor({state:'visible'});await page.screenshot({path:path.join(root,`test-results/login-${viewport.width}.png`),fullPage:true});
-  assert.deepEqual(errors,[]);results.push({viewport,passed:true,flows:['login','13 views','event','commemorative','attendance','enrollment','monthly due date','actual payment date','edit dates','reload','logout'],pageErrors:errors});await context.close();
+  assert.deepEqual(errors,[]);results.push({viewport,passed:true,flows:['login','13 views','event','commemorative','attendance','enrollment','monthly due date','actual payment date','edit dates','reload','other receipts','exclude and restore enrollment','logout'],pageErrors:errors});await context.close();
  }
  console.log(JSON.stringify(results,null,2));fs.writeFileSync(path.join(root,'test-results/browser.json'),JSON.stringify(results,null,2));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
