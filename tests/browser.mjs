@@ -35,7 +35,8 @@ try{
   await page.screenshot({path:path.join(root,`test-results/alunas-${viewport.width}.png`),fullPage:true});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,'No page-wide horizontal overflow');
   await page.locator('button[data-view="financeiro"]').click();
-  await page.getByRole('button',{name:'＋ Outros recebimentos',exact:true}).click();
+  await page.locator('#otherReceiptsPanel').getByRole('button',{name:'＋ Novo recebimento',exact:true}).click();
+  assert(await page.getByRole('dialog',{name:'Novo recebimento',exact:true}).isVisible());
   await page.locator('#otherReceiptForm [name="valor"]').fill('237.45');
   await page.locator('#otherReceiptForm [name="comp"]').fill('Repasse de teste');
   await page.locator('#otherReceiptForm [name="forma"]').selectOption('Transferência');
