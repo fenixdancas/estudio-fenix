@@ -350,7 +350,7 @@ test('Experimental WhatsApp sends a utility template without confirming attendan
   let payload;t.w.fetch=async(url,options)=>{payload=options.body;return {ok:true,status:200,json:async()=>({ok:true,identificador_externo:'synthetic-test-message'})};};
   t.w.eval("gerarCardExperimental=async()=> 'data:image/jpeg;base64,/9j/2Q=='");
   await t.w.eval('enviarExperimentalWhatsApp(901)');
-  assert.equal(payload.get('template'),'fenix_confirmacao_experimental_card');assert.equal(payload.get('card_base64'),'/9j/2Q==');assert.deepEqual(JSON.parse(payload.get('template_params')),['Visitante','Ballet',t.a.nowISO().split('-').reverse().join('/'),'18:00']);
+  assert.equal(payload.get('template'),'fenix_confirmacao_experimental_card_curto');assert.equal(payload.get('card_base64'),'/9j/2Q==');assert.deepEqual(JSON.parse(payload.get('template_params')),['Visitante','Ballet',t.a.nowISO().split('-').reverse().join('/'),'18:00']);
   assert.equal(x.status,'Agendada');assert.equal(x.confirmacao,'');assert(!t.client.calls.some(c=>c.table==='aulas_experimentais'&&c.type==='update'));
   assert.equal(t.client.tables.comunicacoes.length,1);assert.match(t.alerts.at(-1),/aguardando a resposta/);
   t.a.session={tipo:'teacher',teacherId:ids.teacher};await assert.rejects(t.w.eval('enviarExperimentalWhatsApp(901)'),/administrativo/);
