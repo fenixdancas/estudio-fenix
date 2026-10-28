@@ -285,7 +285,7 @@ const DEFAULT = {
 };
 
 let db = structuredClone(DEFAULT);
-let session = null, view = "painel";
+let session = null, view = "painel", sessionEpoch = 0;
 let supabaseClient = null;
 let supabaseReady = false;
 let remoteIds = {};
@@ -338,6 +338,10 @@ function initSupabase(){
   supabaseClient=window.supabase.createClient(SUPABASE_CONFIG.url,SUPABASE_CONFIG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   supabaseReady=true;
   supabaseClient.auth.onAuthStateChange?.((event)=>{
+    if(event==='SIGNED_OUT'&&session){
+      clearLocalSession();
+      void renderLogin();
+    }
     if(event==='PASSWORD_RECOVERY'||(event==='SIGNED_IN'&&inviteRedirect&&!inviteHandled)){
       inviteHandled=true;queueMicrotask(showPasswordRecovery);
     }
@@ -433,14 +437,18 @@ function checkpoint(){baseline={};for(const k of Object.keys(COLLECTIONS))for(co
 function hasPendingChanges(){return Object.keys(COLLECTIONS).some(k=>(db[k]||[]).some(r=>baseline[k+':'+r.id]!==JSON.stringify(r)));}
 async function loadSupabaseDb(){
  if(!supabaseReady||!session)throw new Error('Acesso não autenticado.');
+ const loadingSession=session, loadingEpoch=sessionEpoch;
+ const checkSession=()=>{if(session!==loadingSession||sessionEpoch!==loadingEpoch)throw new Error('A sessão terminou. Entre novamente.');};
  const admin=session.tipo==='admin';
  const names=['professoras','modalidades','turmas','alunas','matriculas_turmas','aulas','presencas'];
  if(admin)names.push('financeiro','eventos','datas_comemorativas','fenix_auditoria');
  const data=Object.fromEntries(await Promise.all(names.map(async name=>[name,await sbSelect(name)])));
+ checkSession();
  // This optional table is deployed separately. Keep the rest of the system usable until then.
  let experimentalRows=[];
  try{experimentalRows=await sbSelect('aulas_experimentais');experimentalAvailable=true;}
  catch(err){if(!/schema cache|does not exist|could not find the table/i.test(err.message))throw err;experimentalAvailable=false;}
+ checkSession();
  const next=clone(DEFAULT), byId={};
  const extra=r=>({...(r.dados_fenix||{}),_version:Number(r.fenix_version||0)});
  const map=(table,rows,convert)=>{byId[table]={};return (rows||[]).map(r=>{const id=localForRemote(table,r.id);byId[table][r.id]=id;return {...extra(r),...convert(r),id};});};
@@ -748,17 +756,26 @@ async function start(){
   document.getElementById("sideLogo").onclick=()=>go(session?.tipo==="teacher"?"alunos":"painel");
 }
 
-async function logout(){
- whatsappMonitor={loaded:false,events:[],communications:[],error:""};
-  if(hasPendingChanges()&&!confirm("Há alterações não salvas no banco. A cópia ficará neste aparelho. Deseja sair?"))return;
-  try{if(supabaseClient)await supabaseClient.auth.signOut()}catch(_){ }
+function clearLocalSession(){
+  // Preserve the existing recovery copy before removing the loaded workspace.
+  if(session&&hasPendingChanges())saveLocalOnly();
+  sessionEpoch++;
+  whatsappMonitor={loaded:false,events:[],communications:[],error:""};
   session=null;cacheOwner=null;dataLoaded=false;db=structuredClone(DEFAULT);remoteIds={};baseline={};
-  closeM();document.getElementById("page").replaceChildren();
+  closeM();modalReturnFocus=null;document.getElementById("page").replaceChildren();
+  document.getElementById('loggedName').textContent='';document.getElementById('avatar').textContent='';
   sessionStorage.removeItem("fenix_session");
   document.getElementById("app").style.display="none";
   document.getElementById("loginScreen").style.display="grid";
   document.getElementById('refreshDataBtn').style.display='none';
+}
+async function logout(){
+  if(hasPendingChanges()&&!confirm("Há alterações não salvas no banco. A cópia ficará neste aparelho. Deseja sair?"))return;
+  clearLocalSession();
+  let signOutFailed=false;
+  try{if(supabaseClient){const result=await supabaseClient.auth.signOut();signOutFailed=!!result?.error;}}catch(_){signOutFailed=true;}
   await renderLogin();
+  if(signOutFailed)alert('A tela foi bloqueada, mas não foi possível confirmar o encerramento da sessão no serviço. Verifique sua conexão antes de entrar novamente.');
 }
 
 function teacherIdMatches(a,b){
