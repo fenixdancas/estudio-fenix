@@ -280,7 +280,7 @@ let experimentalAvailable = false;
 
 const DEFAULT = {
  users:{nahid:{nome:"Nahid",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.nahid},tati:{nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}},
- students:[], teachers:[], classes:[], payments:[], expenses:[], events:[], commemorative:[],
+ students:[], teachers:[], classes:[], payments:[], expenses:[], events:[], commemorative:[], observations:[],
  attendance:[], experimental:[], history:[]
 };
 
@@ -293,6 +293,7 @@ let syncTimer = null;
 
 const money=n=>Number(n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dateBR=d=>d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"";
+const dateTimeBR=d=>{const date=new Date(d||'');return Number.isNaN(date.getTime())?'':new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(date)};
 const nowISO=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 function monthlyDueDate(student,month){
  const day=Number(student?.diaVenc);
@@ -439,6 +440,11 @@ async function sbSelect(table,columns='*'){
   rows.push(...(data||[]));if(!data||data.length<size)return rows;
  }
 }
+async function loadSharedObservations(){
+ const {data,error}=await supabaseClient.rpc('fenix_listar_observacoes_compartilhadas');
+ if(error)throw new Error('Não foi possível carregar as observações compartilhadas. '+error.message);
+ return Array.isArray(data)?data:[];
+}
 function checkpoint(){baseline={};for(const k of Object.keys(COLLECTIONS))for(const r of db[k])baseline[k+':'+r.id]=JSON.stringify(r);}
 function hasPendingChanges(){return Object.keys(COLLECTIONS).some(k=>(db[k]||[]).some(r=>baseline[k+':'+r.id]!==JSON.stringify(r)));}
 async function loadSupabaseDb(){
@@ -449,6 +455,7 @@ async function loadSupabaseDb(){
  const names=['professoras','modalidades','turmas','alunas','matriculas_turmas','aulas','presencas'];
  if(admin)names.push('financeiro','eventos','datas_comemorativas','fenix_auditoria');
  const data=Object.fromEntries(await Promise.all(names.map(async name=>[name,await sbSelect(name)])));
+ const sharedObservations=await loadSharedObservations();
  checkSession();
  // This optional table is deployed separately. Keep the rest of the system usable until then.
  let experimentalRows=[];
@@ -468,6 +475,7 @@ async function loadSupabaseDb(){
  }
  next.classes=map('turmas',data.turmas,r=>({nome:r.nome,modalidade:mods[r.modalidade_id]||'',dia:dayNames[r.dia_semana],hora:String(r.horario||'').slice(0,5),profId:byId.professoras[r.professora_id]||'',status:r.status,limite:r.limite_alunos,obs:r.observacao||''}));
  next.students=map('alunas',data.alunas,r=>({nome:r.nome,nasc:r.data_nascimento||'',cpf:r.cpf||'',rg:r.rg||'',fone:r.telefone||'',email:r.email||'',endereco:r.endereco||'',foto:r.foto_url||'',respNome:r.responsavel_nome||'',respCpf:r.responsavel_cpf||'',respFone:r.responsavel_telefone||'',respParentesco:r.responsavel_parentesco||'',menor:r.menor,status:r.status,mensalidade:r.dados_fenix?.mensalidade??null,turmaIds:data.matriculas_turmas.filter(m=>m.aluna_id===r.id&&m.status==='ativa').map(m=>byId.turmas[m.turma_id]).filter(Boolean)}));
+ next.observations=sharedObservations.filter(r=>byId.alunas[r.aluna_id]).map(r=>({id:r.id,studentId:byId.alunas[r.aluna_id],authorId:r.autora_id,author:r.autora_nome||'Professora',content:r.conteudo,createdAt:r.created_at}));
  for(const s of next.students){s.modalidades=[...new Set(s.turmaIds.map(id=>next.classes.find(c=>c.id===id)?.modalidade).filter(Boolean))];}
  const finance=map('financeiro',data.financeiro,r=>({studentId:byId.alunas[r.aluna_id]||null,aluno:next.students.find(s=>s.id===byId.alunas[r.aluna_id])?.nome||r.descricao,nome:r.descricao,comp:r.descricao,valor:Number(r.valor||0),venc:r.vencimento||'',pago:r.status==='pago',data:r.pago_em?String(r.pago_em).slice(0,10):'',forma:r.forma_pagamento||'',_tipo:r.tipo,_status:r.status,_pagoEm:r.pago_em||null}));
  next.payments=finance.filter(r=>r._tipo!=='saida');next.expenses=finance.filter(r=>r._tipo==='saida');
@@ -1089,9 +1097,30 @@ function abrirAluno(id){
  if(session?.tipo==="teacher" && !cs.some(c=>teacherOwnsClass(c))){alert("Esta aluna não pertence a uma turma desta professora.");return}
  const turmasTexto=cs.map(c=>`${esc(c.nome)} · ${esc(c.dia)} ${esc(c.hora)}`).join("<br>")||"—";
  const saudeHtml=saudeHtmlAluna_(s);
- openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Data de nascimento:</strong> ${s.nasc?esc(dateBR(s.nasc)):"Não informada"} &nbsp; <strong>Profissão:</strong> ${esc(s.profissao||"Não informada")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p>${session?.tipo==='admin'?`<button class="btn" onclick="novaMatricula(${s.id})">Editar matrícula</button>`:''}</div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
+ const legacyObs=String(s.obs||'').trim();
+ const notes=(db.observations||[]).filter(o=>String(o.studentId)===String(s.id)).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+ const sharedNotes=notes.map(o=>`<article class="panel" style="margin:10px 0;padding:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>${esc(o.author||'Professora')}</strong><span class="small muted">${esc(dateTimeBR(o.createdAt))}</span></div><p style="white-space:pre-wrap;margin-bottom:0">${esc(o.content)}</p></article>`).join('');
+ const newNoteForm=session?.tipo==='teacher'?`<div class="field" style="margin-top:14px"><label for="teacherObs">Nova observação</label><textarea id="teacherObs" maxlength="4000" placeholder="Registre algo que ajude as outras professoras a acompanhar a aluna." style="min-height:90px"></textarea></div><div class="actions" style="justify-content:flex-end;margin-top:10px"><button id="addTeacherObservation" class="btn primary" onclick="salvarObsProf(${s.id})">Adicionar observação</button></div>`:'';
+ openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Data de nascimento:</strong> ${s.nasc?esc(dateBR(s.nasc)):"Não informada"} &nbsp; <strong>Profissão:</strong> ${esc(s.profissao||"Não informada")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p>${session?.tipo==='admin'?`<button class="btn" onclick="novaMatricula(${s.id})">Editar matrícula</button>`:''}</div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div>${legacyObs?`<div class="panel"><h2>Observação anterior</h2><p style="white-space:pre-wrap">${esc(legacyObs)}</p><p class="small muted">Registro antigo, sem autoria e data individualizadas.</p></div>`:''}<div class="panel"><h2>Observações compartilhadas</h2><p class="small muted">As professoras das turmas ativas desta aluna podem ler e acrescentar observações.</p>${sharedNotes||'<p class="muted">Nenhuma observação compartilhada registrada.</p>'}${newNoteForm}</div>`)
 }
-async function salvarObsProf(id){const s=db.students.find(x=>x.id==id);if(!s)return;const v=document.getElementById("teacherObs").value;s.obs=v;await save();log("Observação da aluna atualizada",s.nome);closeM();alert("Observação salva.")}
+async function salvarObsProf(id){
+ const s=db.students.find(x=>String(x.id)===String(id));if(!s)return;
+ if(session?.tipo!=='teacher'||!teacherOwnsStudent(s))throw new Error('Aluna não vinculada à professora.');
+ const field=document.getElementById('teacherObs'),button=document.getElementById('addTeacherObservation');
+ const content=String(field?.value||'').trim();if(!content){alert('Escreva uma observação antes de adicionar.');return false;}
+ if(content.length>4000){alert('A observação deve ter até 4.000 caracteres.');return false;}
+ if(!session.authUserId)throw new Error('Não foi possível identificar a professora conectada.');
+ if(button)button.disabled=true;
+ try{
+  const payload={aluna_id:remoteForLocal('alunas',s.id),autora_id:session.authUserId,visibilidade:'compartilhada',conteudo:content};
+  if(!payload.aluna_id)throw new Error('Vínculo da aluna não encontrado no banco.');
+  const {data,error}=await supabaseClient.from('observacoes').insert(payload).select('id,aluna_id,autora_id,conteudo,created_at').single();
+  if(error)throw new Error(error.message||'O banco recusou a observação.');
+  if(!data?.id)throw new Error('O banco não confirmou a observação.');
+  db.observations.push({id:data.id,studentId:s.id,authorId:session.authUserId,author:session.nome||'Professora',content:data.conteudo||content,createdAt:data.created_at||new Date().toISOString()});
+  saveLocalOnly();abrirAluno(s.id);setSaveStatus('Observação compartilhada salva.','ok');return true;
+ }catch(err){if(button)button.disabled=false;alert('Não foi possível adicionar a observação: '+err.message);return false;}
+}
 
 
 function novoProfessor(id){

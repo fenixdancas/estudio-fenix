@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {app,fixtures,fakeClient,ids,html} from './harness.mjs';
 async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
+const writeRpcCalls=t=>t.client.calls.filter(c=>c.type==='rpc'&&c.name!=='fenix_listar_observacoes_compartilhadas');
 test('Loading and refreshing never rewrite legacy financial records',async()=>{
  const client=fakeClient();Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:'2026-10-01',diaVenc:'20'});
  client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',status:'em_aberto',vencimento:'2026-10-01',descricao:'2026-10',valor:255});
@@ -8,7 +9,7 @@ test('Loading and refreshing never rewrite legacy financial records',async()=>{
  try{
   await t.a.loadSupabaseDb();await t.a.loadSupabaseDb();
   assert.equal(JSON.stringify(client.tables.financeiro),original);
-  assert.equal(client.calls.filter(c=>c.type==='rpc').length,0);
+  assert.equal(client.calls.filter(c=>c.type==='rpc'&&c.name!=='fenix_listar_observacoes_compartilhadas').length,0);
   assert.equal(t.a.db.payments[0].valor,255);assert.equal(t.a.db.payments[0].venc,'2026-10-01');
   assert.equal(t.a.pending,false);
  }finally{t.close();}
@@ -148,7 +149,7 @@ test('Monthly student picker sorts names and follows the selected VIP plan',asyn
   assert.equal(form.elements.tipoMensalidade.value,'Regular');assert.equal(form.elements.valor.value,'255');
  }finally{t.close();}
 });
-test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,1);t.close();});
+test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(writeRpcCalls(t).length,1);t.close();});
 test('Save and reload preserves health, monthly amount and observations',async()=>{const t=await setup();const s=t.a.db.students[0];s.saudeObs='Nova observação';s.mensalidade=500;s.emergNome='Contato sintético';await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,500);assert.equal(t.a.db.students[0].saudeObs,'Nova observação');assert.equal(t.a.db.students[0].emergNome,'Contato sintético');assert.equal(t.a.db.students[0].alergias,'Sim');t.close();});
 test('Teacher health summary hides unknown-only selections and lists declared conditions',()=>{
  const t=app();
@@ -186,7 +187,7 @@ test('New enrollment creates separate receivables once and does not invent VIP a
 test('Retry after finance failure does not duplicate enrollment or charges',async()=>{
  const client=fakeClient(),rpc=client.rpc.bind(client);let failOnce=true;
  client.rpc=async(name,p)=>{
-  if(p.p_tabela==='financeiro'&&failOnce){failOnce=false;return {error:{message:'Falha financeira simulada'}};}
+  if(p?.p_tabela==='financeiro'&&failOnce){failOnce=false;return {error:{message:'Falha financeira simulada'}};}
   return rpc(name,p);
  };
  const t=app(client);await t.a.loadSupabaseDb();t.a.novaMatricula();
@@ -211,14 +212,29 @@ test('Existing enrollments can generate missing receivables without duplicates',
 });
 test('Load failure never replaces existing data with partial data',async()=>{const t=await setup();const previous=JSON.stringify(t.a.db);t.client.fail({table:'alunas',message:'network'});await assert.rejects(t.a.loadSupabaseDb());assert.equal(JSON.stringify(t.a.db),previous);t.close();});
 test('Failed write stays pending, no false success',async()=>{const t=await setup();t.a.db.students[0].obs='Pendente';t.client.fail({message:'RLS denied'});await assert.rejects(t.a.save());assert.equal(t.a.pending,true);assert.match(t.w.document.getElementById('saveStatus').textContent,/Não salvo/);t.client.fail(null);await t.a.save();assert.equal(t.a.pending,false);t.close();});
-test('Unchanged rows are not rewritten',async()=>{const t=await setup();await t.a.save();assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,0);t.close();});
-test('Concurrent saves share one in-flight write',async()=>{const t=await setup();t.a.db.students[0].obs='Uma escrita';await Promise.all([t.a.save(),t.a.save()]);assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,1);t.close();});
+test('Unchanged rows are not rewritten',async()=>{const t=await setup();await t.a.save();assert.equal(writeRpcCalls(t).length,0);t.close();});
+test('Concurrent saves share one in-flight write',async()=>{const t=await setup();t.a.db.students[0].obs='Uma escrita';await Promise.all([t.a.save(),t.a.save()]);assert.equal(writeRpcCalls(t).length,1);t.close();});
 test('Optimistic conflict does not overwrite newer server row',async()=>{const t=await setup();t.client.tables.alunas[0].fenix_version=5;t.a.db.students[0].obs='antigo';await assert.rejects(t.a.save(),/Conflito/);assert.equal(t.client.tables.alunas[0].dados_fenix.obs,'Adaptação');t.close();});
 test('Attendance is persisted with four distinct statuses',async()=>{const t=await setup();for(const status of ['Presente','Ausente','Falta justificada','Atestado médico']){const a={id:900+t.a.db.attendance.length,data:'2026-09-23',turmaId:t.a.db.classes[0].id,studentIds:[t.a.db.students[0].id],status:[status],pres:[status==='Presente'],obs:'Aula'};t.a.db.attendance.push(a);await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.attendance.at(-1).status[0],status);}t.close();});
 test('Teacher does not load finance and cannot write administrative data',async()=>{const t=app();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};await t.a.loadSupabaseDb();assert(!t.client.calls.some(c=>c.table==='financeiro'));t.a.db.teachers[0].nome='Tentativa';await assert.rejects(t.a.save(),/permissão/);t.close();});
 test('Teacher UUID maps to class; same name never grants access',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora B'};assert.equal(t.a.visibleClasses().length,1);assert.equal(t.a.visibleStudents().length,1);assert.equal(t.a.teacherOwnsClass(t.a.db.classes[1]),false);t.close();});
-test('Teacher observations use scoped RPC',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].obs='Adaptação nova';await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc');assert.equal(call.name,'fenix_salvar_observacao_professora');assert.equal(call.p.p_obs,'Adaptação nova');t.close();});
-test('Teacher attendance uses scoped RPC for own class',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.attendance.push({id:901,data:'2026-09-23',turmaId:t.a.db.classes[0].id,studentIds:[t.a.db.students[0].id],status:['Presente'],pres:[true],obs:'Aula'});await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc');assert.equal(call.name,'fenix_salvar_aula_professora');assert.equal(call.p.p_turma,ids.class);t.close();});
+test('Teacher observations use scoped RPC',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].obs='Adaptação nova';await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc'&&c.name==='fenix_salvar_observacao_professora');assert.equal(call.p.p_obs,'Adaptação nova');t.close();});
+test('Shared observations show the legacy note and append named entries for only the selected student',async()=>{
+ const tables=fixtures();tables.perfis=[{id:'author-a',nome:'Professora de Ballet'}];tables.observacoes=[
+  {id:'note-a',aluna_id:ids.student,autora_id:'author-a',visibilidade:'compartilhada',conteudo:'Ajustar postura no giro.',created_at:'2026-10-30T12:00:00Z'},
+  {id:'note-b',aluna_id:ids.student2,autora_id:'author-a',visibilidade:'compartilhada',conteudo:'Nota de outra aluna.',created_at:'2026-10-30T12:01:00Z'}
+ ];
+ const t=app(fakeClient(tables));t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora de Jazz',authUserId:ids.teacherAuth};await t.a.loadSupabaseDb();
+ const student=t.a.db.students.find(s=>t.a.remoteForLocal('alunas',s.id)===ids.student);t.a.abrirAluno(student.id);
+ let text=t.w.document.getElementById('modalbox').textContent;assert.match(text,/Adaptação/);assert.match(text,/Professora de Ballet/);assert(!text.includes('Nota de outra aluna.'));
+ const field=t.w.document.getElementById('teacherObs');field.value='Boa evolução no deslocamento.';assert.equal(await t.a.salvarObsProf(student.id),true);
+ assert.equal(tables.observacoes.length,3);const saved=tables.observacoes.at(-1);assert.equal(saved.aluna_id,ids.student);assert.equal(saved.autora_id,ids.teacherAuth);assert.equal(saved.visibilidade,'compartilhada');assert.equal(saved.conteudo,'Boa evolução no deslocamento.');
+ assert.equal(student.obs,'Adaptação');text=t.w.document.getElementById('modalbox').textContent;assert.match(text,/Boa evolução no deslocamento/);assert.match(text,/Professora de Jazz/);t.close();
+});
+test('Shared observations report a denied write without appending it locally',async()=>{
+ const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora',authUserId:ids.teacherAuth};await t.a.loadSupabaseDb();const student=t.a.db.students[0];t.a.abrirAluno(student.id);t.w.document.getElementById('teacherObs').value='Nota sintética';t.client.fail({table:'observacoes',message:'new row violates row-level security policy'});assert.equal(await t.a.salvarObsProf(student.id),false);assert.equal(t.a.db.observations.length,0);assert.match(t.alerts.at(-1),/Não foi possível adicionar/);t.close();
+});
+test('Teacher attendance uses scoped RPC for own class',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.attendance.push({id:901,data:'2026-09-23',turmaId:t.a.db.classes[0].id,studentIds:[t.a.db.students[0].id],status:['Presente'],pres:[true],obs:'Aula'});await t.a.save();const call=t.client.calls.find(c=>c.type==='rpc'&&c.name==='fenix_salvar_aula_professora');assert.equal(call.p.p_turma,ids.class);t.close();});
 test('Teacher records only attendance for own experimental; failed write stays visible',async()=>{
  const tables=fixtures();tables.aulas_experimentais=[{id:'60000000-0000-4000-8000-000000000001',nome:'Visitante',telefone:'11999999999',modalidade:'Ballet',data:'2026-09-30',horario:'18:00',professora_id:ids.teacher,status:'Confirmada',dados_fenix:{confirmacao:'Confirmou',matricula:''}},{id:'60000000-0000-4000-8000-000000000002',nome:'Outra',telefone:'11999999998',modalidade:'Ballet',data:'2026-09-30',horario:'19:00',professora_id:ids.teacher2,status:'Agendada'}];
  const t=app(fakeClient(tables));t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};await t.a.loadSupabaseDb();
@@ -364,7 +380,7 @@ test('Zero check-in is hidden from monthly list without fee, payment action or p
    assert.equal(rows.length,0);assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
    assert.equal(t.a.db.payments.filter(t.w.financePending).length,0);
   }
-  assert.equal(client.calls.filter(c=>c.type==='rpc').length,0);assert.equal(client.tables.financeiro.length,2);
+  assert.equal(client.calls.filter(c=>c.type==='rpc'&&c.name!=='fenix_listar_observacoes_compartilhadas').length,0);assert.equal(client.tables.financeiro.length,2);
  }finally{t.close();}
 });
 
