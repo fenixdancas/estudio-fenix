@@ -54,6 +54,18 @@ test('Monthly list hides unpaid zero-value Wellhub and TotalPass placeholders, p
   assert.match(html,/Aluna Wellhub/);assert.match(html,/R\$\s*150,00/);
  }finally{t.close();}
 });
+test('Monthly list hides Wellhub and Totalpass partner entries at any value or status',async()=>{
+ const t=await setup();
+ try{
+  t.a.db.students.push({id:9901,nome:'Wellhub',checkin:'Nenhum'},{id:9902,nome:'Totalpass',checkin:'Nenhum'});
+  t.a.db.payments.push(
+   {id:9911,studentId:9901,aluno:'Wellhub',comp:'2026-10',valor:150,_tipo:'mensalidade',_status:'em_aberto',pago:false},
+   {id:9912,studentId:9902,aluno:'Totalpass',comp:'2026-10',valor:150,_tipo:'mensalidade',_status:'pago',pago:true}
+  );
+  t.a.view='mensalidades';t.a.render();const page=t.w.document.getElementById('page').textContent;
+  assert.doesNotMatch(page,/Wellhub|Totalpass/);
+ }finally{t.close();}
+});
 test('Payment date stays separate from due date through receipt, edits and reload',async()=>{
  const t=app();
  t.client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',descricao:'2026-10',valor:255,status:'em_aberto',vencimento:'2026-10-01',pago_em:null});
