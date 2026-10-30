@@ -1062,6 +1062,25 @@ async function saveAluno(e,id){
  if(!id)createEnrollmentReceivables(o);
  await save();closeM();render();visualizarContrato(o.id);
 }
+function saudeHtmlAluna_(s){
+ const condicoes=[], add=(value)=>{const text=String(value||"").trim();if(text&&!condicoes.includes(text))condicoes.push(text);};
+ ["fisicas","respiratorias","autoimunes","psicologicas"].forEach(k=>{
+  (Array.isArray(s[k])?s[k]:[]).forEach(value=>{
+   const text=String(value||"").trim(), normalized=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+   if(!text||normalized==="desconheco")return;
+   add(normalized==="outra"||normalized==="outras"?"Outra condição":text);
+  });
+ });
+ if(s.tabagismo==="Sim")add("Tabagismo");
+ if(s.alergias==="Sim")add("Alergias: "+String(s.alergiaDetalhe||"Sim").trim());
+ if(s.cirurgias==="Sim")add("Cirurgias: "+String(s.cirurgiaDetalhe||"Sim").trim());
+ if(s.fobias==="Sim")add("Fobias: "+String(s.fobiaDetalhe||"Sim").trim());
+ const itens=[];
+ if(condicoes.length)itens.push(`<p><strong>Condições declaradas:</strong> ${condicoes.map(esc).join(", ")}</p>`);
+ const observacoes=String(s.saudeObs||"").trim();
+ if(observacoes)itens.push(`<p><strong>Observações de saúde:</strong> ${esc(observacoes)}</p>`);
+ return itens.join("")||'<p class="muted">Nada declarado pela aluna.</p>';
+}
 function abrirAluno(id){
  if(session?.tipo!=="teacher"&&!session?.teacherView){novaMatricula(id);return}
  const s=db.students.find(x=>x.id==id); if(!s)return;
@@ -1069,17 +1088,7 @@ function abrirAluno(id){
  const cs=turmaIds.map(id=>db.classes.find(x=>x.id==id)).filter(Boolean);
  if(session?.tipo==="teacher" && !cs.some(c=>teacherOwnsClass(c))){alert("Esta aluna não pertence a uma turma desta professora.");return}
  const turmasTexto=cs.map(c=>`${esc(c.nome)} · ${esc(c.dia)} ${esc(c.hora)}`).join("<br>")||"—";
- const saudeItens=[];
- if(s.tabagismo==="Sim")saudeItens.push("<p><strong>Tabagismo:</strong> Sim</p>");
- if(s.alergias==="Sim")saudeItens.push(`<p><strong>Alergias:</strong> ${esc(s.alergiaDetalhe||"Sim")}</p>`);
- if(s.cirurgias==="Sim")saudeItens.push(`<p><strong>Cirurgias:</strong> ${esc(s.cirurgiaDetalhe||"Sim")}</p>`);
- if(s.fobias==="Sim")saudeItens.push(`<p><strong>Fobias:</strong> ${esc(s.fobiaDetalhe||"Sim")}</p>`);
- if((s.fisicas||[]).length)saudeItens.push(`<p><strong>Físicas:</strong> ${esc(s.fisicas.join(", "))}</p>`);
- if((s.respiratorias||[]).length)saudeItens.push(`<p><strong>Respiratórias:</strong> ${esc(s.respiratorias.join(", "))}</p>`);
- if((s.autoimunes||[]).length)saudeItens.push(`<p><strong>Autoimunes:</strong> ${esc(s.autoimunes.join(", "))}</p>`);
- if((s.psicologicas||[]).length)saudeItens.push(`<p><strong>Psicológicas:</strong> ${esc(s.psicologicas.join(", "))}</p>`);
- if(String(s.saudeObs||"").trim())saudeItens.push(`<p><strong>Observações de saúde:</strong> ${esc(s.saudeObs)}</p>`);
- const saudeHtml=saudeItens.join("")||'<p class="muted">Nenhuma condição de saúde informada.</p>';
+ const saudeHtml=saudeHtmlAluna_(s);
  openM("Ficha da aluna",`<div class="panel"><h2>${esc(s.nome)}</h2><p><strong>Contato:</strong> ${esc(s.fone||"—")} &nbsp; <strong>Responsável:</strong> ${esc(s.respNome||"—")}</p><p><strong>Data de nascimento:</strong> ${s.nasc?esc(dateBR(s.nasc)):"Não informada"} &nbsp; <strong>Profissão:</strong> ${esc(s.profissao||"Não informada")}</p><p><strong>Turmas:</strong><br>${turmasTexto}</p>${session?.tipo==='admin'?`<button class="btn" onclick="novaMatricula(${s.id})">Editar matrícula</button>`:''}</div><div class="panel"><h2>Ficha de saúde</h2>${saudeHtml}</div><div class="panel"><h2>Observações para a aula</h2><textarea id="teacherObs" style="min-height:120px">${esc(s.obs||"")}</textarea><div class="actions" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" onclick="salvarObsProf(${s.id})">Salvar observação</button></div></div>`)
 }
 async function salvarObsProf(id){const s=db.students.find(x=>x.id==id);if(!s)return;const v=document.getElementById("teacherObs").value;s.obs=v;await save();log("Observação da aluna atualizada",s.nome);closeM();alert("Observação salva.")}
