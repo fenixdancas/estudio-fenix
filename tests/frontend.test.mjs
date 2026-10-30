@@ -37,6 +37,23 @@ test('Monthly form updates due date for student and month and accepts an explici
   assert.equal(t.client.tables.financeiro[0].vencimento,'2026-02-25');assert.equal(t.client.tables.financeiro[0].pago_em,null);
  }finally{t.close();}
 });
+test('Monthly list hides unpaid zero-value Wellhub and TotalPass placeholders, preserving actual charges',async()=>{
+ const t=await setup();
+ try{
+  const wellhub=t.a.db.students[0].id,totalpass=t.a.db.students[1].id;
+  t.a.db.students.find(s=>s.id===wellhub).checkin='Wellhub';
+  t.a.db.students.find(s=>s.id===totalpass).checkin='TotalPass';
+  t.a.db.payments.push(
+   {id:88,studentId:wellhub,aluno:'Aluna Wellhub',comp:'2026-10',valor:0,_tipo:'mensalidade',_status:'em_aberto',pago:false},
+   {id:89,studentId:totalpass,aluno:'Aluno TotalPass',comp:'2026-10',valor:0,_tipo:'mensalidade',_status:'em_aberto',pago:false},
+   {id:90,studentId:wellhub,aluno:'Aluna Wellhub',comp:'2026-10',valor:150,_tipo:'mensalidade',_status:'pago',pago:true}
+  );
+  t.a.view='mensalidades';t.a.render();const html=t.w.document.getElementById('page').textContent;
+  assert.doesNotMatch(html,/Aluna Wellhub.*2026-10.*R\$\s*0,00/s);
+  assert.doesNotMatch(html,/Aluno TotalPass.*2026-10.*R\$\s*0,00/s);
+  assert.match(html,/Aluna Wellhub/);assert.match(html,/R\$\s*150,00/);
+ }finally{t.close();}
+});
 test('Payment date stays separate from due date through receipt, edits and reload',async()=>{
  const t=app();
  t.client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',descricao:'2026-10',valor:255,status:'em_aberto',vencimento:'2026-10-01',pago_em:null});
@@ -314,29 +331,28 @@ test('Public contract network errors do not claim the link is invalid',async()=>
  try{await t.w.eval('startContractAcceptance()');assert.match(t.w.document.body.textContent,/Não foi possível carregar/);assert.doesNotMatch(t.w.document.body.textContent,/inválido|expirou/);}finally{t.close();}
 });
 
-test('Zero check-in stays visible once without fee, payment action or pending count after reload',async()=>{
+test('Zero check-in is hidden from monthly list without fee, payment action or pending count after reload',async()=>{
  const client=fakeClient();client.tables.alunas[0].nome='Jaqueline';Object.assign(client.tables.alunas[0].dados_fenix,{checkin:'Wellhub',mensalidade:null,valorMatricula:'isento'});
  for(const [i,tipo,valor] of [[1,'mensalidade',0],[2,'entrada',60]])client.tables.financeiro.push({id:`50000000-0000-4000-8000-00000000000${i}`,aluna_id:ids.student,tipo,descricao:tipo==='entrada'?'Matrícula':'2026-09',valor,status:'cancelado',vencimento:'2026-09-10'});
  const t=app(client);try{
   for(let i=0;i<2;i++){
    await t.a.loadSupabaseDb();t.a.view='mensalidades';t.a.render();
    const rows=[...t.w.document.querySelectorAll('#page tr')].filter(r=>r.textContent.includes('Jaqueline'));
-   assert.equal(rows.length,1);assert.match(rows[0].textContent,/R\$\s*0,00/);assert.match(rows[0].textContent,/Check-in · sem cobrança/);
-   assert(!rows[0].textContent.includes('60,00'));assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
+   assert.equal(rows.length,0);assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
    assert.equal(t.a.db.payments.filter(t.w.financePending).length,0);
   }
   assert.equal(client.calls.filter(c=>c.type==='rpc').length,0);assert.equal(client.tables.financeiro.length,2);
  }finally{t.close();}
 });
 
-test('Manually launched zero check-in is informational before and after reload',async()=>{
+test('Manually launched zero check-in stays hidden before and after reload',async()=>{
  const t=await setup();try{
   Object.assign(t.a.db.students[0],{checkin:'Wellhub',mensalidade:0,diaVenc:'10'});
   await t.a.save();t.a.view='mensalidades';t.a.novaMensalidade();
   const form=t.w.document.getElementById('payForm');await form.onsubmit({preventDefault(){},currentTarget:form});
   for(let i=0;i<2;i++){
    if(i)await t.a.loadSupabaseDb();t.a.render();
-   assert.match(t.w.document.getElementById('page').textContent,/Check-in · sem cobrança/);
+   assert.doesNotMatch(t.w.document.getElementById('page').textContent,/Check-in · sem cobrança/);
    assert.equal(t.w.document.querySelectorAll('#page button[onclick^="receber"]').length,0);
    assert.equal(t.a.db.payments.filter(t.w.financePending).length,0);
   }
