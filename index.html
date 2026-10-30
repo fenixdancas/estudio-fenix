@@ -1072,9 +1072,9 @@ function saudeHtmlAluna_(s){
   });
  });
  if(s.tabagismo==="Sim")add("Tabagismo");
- if(s.alergias==="Sim")add("Alergias: "+String(s.alergiaDetalhe||"Sim").trim());
- if(s.cirurgias==="Sim")add("Cirurgias: "+String(s.cirurgiaDetalhe||"Sim").trim());
- if(s.fobias==="Sim")add("Fobias: "+String(s.fobiaDetalhe||"Sim").trim());
+ if(s.alergias==="Sim")add("Alergias: "+(String(s.alergiaDetalhe||"").trim()||"Sim"));
+ if(s.cirurgias==="Sim")add("Cirurgias: "+(String(s.cirurgiaDetalhe||"").trim()||"Sim"));
+ if(s.fobias==="Sim")add("Fobias: "+(String(s.fobiaDetalhe||"").trim()||"Sim"));
  const itens=[];
  if(condicoes.length)itens.push(`<p><strong>Condições declaradas:</strong> ${condicoes.map(esc).join(", ")}</p>`);
  const observacoes=String(s.saudeObs||"").trim();
