@@ -57,6 +57,40 @@ test('Exported RLS permits scoped teacher observations and lessons through narro
  }finally{await db.close();}
 });
 
+test('Shared observation history is visible only to teachers linked to the student and includes author names',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/202609230001_fenix_persistencia.sql'));
+  await db.exec(read('../supabase/migrations/202609230002_acesso_professoras.sql'));
+  await db.exec(read('../supabase/migrations/202610300001_observacoes_compartilhadas_professoras.sql'));
+  const userA='00000000-0000-4000-8000-000000000041',userB='00000000-0000-4000-8000-000000000042',userC='00000000-0000-4000-8000-000000000043';
+  const profA='00000000-0000-4000-8000-000000000044',profB='00000000-0000-4000-8000-000000000045',profC='00000000-0000-4000-8000-000000000046';
+  const classA='00000000-0000-4000-8000-000000000047',classB='00000000-0000-4000-8000-000000000048',classC='00000000-0000-4000-8000-000000000049';
+  const studentA='00000000-0000-4000-8000-000000000050',studentC='00000000-0000-4000-8000-000000000051';
+  const mod='00000000-0000-4000-8000-000000000052';
+  await db.query('insert into auth.users(id) values($1),($2),($3)',[userA,userB,userC]);
+  await db.query("insert into professoras(id,nome) values($1,'Ballet'),($2,'Jazz'),($3,'Dança do ventre')",[profA,profB,profC]);
+  await db.query("insert into perfis(id,professora_id,nome,papel) values($1,$2,'Professora Ballet','professora'),($3,$4,'Professora Jazz','professora'),($5,$6,'Professora DV','professora')",[userA,profA,userB,profB,userC,profC]);
+  await db.query("insert into modalidades(id,nome) values($1,'Dança')",[mod]);
+  await db.query("insert into turmas(id,nome,modalidade_id,dia_semana,horario,professora_id) values($1,'Turma Ballet',$4,1,'18:00',$2),($3,'Turma Jazz',$4,2,'19:00',$5),($6,'Turma DV',$4,3,'20:00',$7)",[classA,profA,classB,mod,profB,classC,profC]);
+  await db.query("insert into alunas(id,nome) values($1,'Mireya'),($2,'Outra aluna')",[studentA,studentC]);
+  await db.query("insert into matriculas_turmas(aluna_id,turma_id) values($1,$2),($1,$3),($4,$5)",[studentA,classA,classB,studentC,classC]);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[userA]);await db.exec('set role authenticated');
+  const insert=await db.query("insert into observacoes(aluna_id,autora_id,visibilidade,conteudo) values($1,$2,'compartilhada','Observar eixo no giro') returning id",[studentA,userA]);
+  const listedA=(await db.query('select * from fenix_listar_observacoes_compartilhadas()')).rows;
+  assert.equal(listedA.length,1);assert.equal(listedA[0].autora_nome,'Professora Ballet');assert.equal(listedA[0].id,insert.rows[0].id);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[userB]);
+  const listedB=(await db.query('select * from fenix_listar_observacoes_compartilhadas()')).rows;
+  assert.equal(listedB.length,1);assert.equal(listedB[0].conteudo,'Observar eixo no giro');
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[userC]);
+  assert.equal((await db.query('select * from fenix_listar_observacoes_compartilhadas()')).rows.length,0);
+  assert.equal((await db.query('select * from observacoes where aluna_id=$1',[studentA])).rows.length,0);
+  await assert.rejects(db.query("insert into observacoes(aluna_id,autora_id,visibilidade,conteudo) values($1,$2,'compartilhada','Não autorizado')",[studentA,userC]),/row-level security/i);
+  await db.query("insert into observacoes(aluna_id,autora_id,visibilidade,conteudo) values($1,$2,'compartilhada','Somente turma DV')",[studentC,userC]);
+ }finally{await db.close();}
+});
+
 test('Experimental attendance RPC cannot edit another teacher or administrative fields',async()=>{
  const db=new PGlite();
  try{
