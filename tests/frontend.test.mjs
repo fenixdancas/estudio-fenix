@@ -150,6 +150,17 @@ test('Monthly student picker sorts names and follows the selected VIP plan',asyn
 });
 test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(t.client.calls.filter(c=>c.type==='rpc').length,1);t.close();});
 test('Save and reload preserves health, monthly amount and observations',async()=>{const t=await setup();const s=t.a.db.students[0];s.saudeObs='Nova observação';s.mensalidade=500;s.emergNome='Contato sintético';await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,500);assert.equal(t.a.db.students[0].saudeObs,'Nova observação');assert.equal(t.a.db.students[0].emergNome,'Contato sintético');assert.equal(t.a.db.students[0].alergias,'Sim');t.close();});
+test('Teacher health summary hides unknown-only selections and lists declared conditions',()=>{
+ const t=app();
+ try{
+  const unknown={fisicas:['Desconheço'],respiratorias:['Desconheço'],autoimunes:['Desconheço'],psicologicas:['Desconheço'],tabagismo:'Não',alergias:'Não',cirurgias:'Não',fobias:'Não'};
+  const empty=t.w.eval(`saudeHtmlAluna_(${JSON.stringify(unknown)})`);
+  assert.match(empty,/Nada declarado pela aluna/);assert.doesNotMatch(empty,/Desconheço/);
+  const declared={...unknown,fisicas:['Bursite','Desconheço'],psicologicas:['Depressão']};
+  const summary=t.w.eval(`saudeHtmlAluna_(${JSON.stringify(declared)})`);
+  assert.match(summary,/Bursite, Depressão/);assert.doesNotMatch(summary,/Desconheço/);
+ }finally{t.close();}
+});
 test('No hardcoded tuition when source has no amount',async()=>{const t=app();delete t.client.tables.alunas[0].dados_fenix.mensalidade;await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,null);t.close();});
 test('New enrollment creates separate receivables once and does not invent VIP amounts',async()=>{
  for(const vip of [false,true]){
