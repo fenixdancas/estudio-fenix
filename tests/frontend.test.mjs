@@ -24,7 +24,7 @@ test('Monthly generation skips check-in partners and existing current competence
 });
 test('Concurrent admin logins generate one monthly charge with a stable finance ID',async()=>{
  const client=fakeClient(),t1=app(client),t2=app(client),month=t1.a.nowISO().slice(0,7);
- Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:month+'-01',diaVenc:'10'});
+ Object.assign(client.tables.alunas[0].dados_fenix,{diaVenc:'10'});
  try{
   await Promise.all([t1.a.loadSupabaseDb(),t2.a.loadSupabaseDb()]);
   const rows=client.tables.financeiro.filter(p=>p.tipo==='mensalidade'&&p.descricao===month);
