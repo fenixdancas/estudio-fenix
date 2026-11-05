@@ -54,7 +54,7 @@ textarea{min-height:100px;resize:vertical}.field{margin-bottom:14px}.form-grid{d
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}.card{background:#fff;border:1px solid #eadfea;border-radius:var(--radius);padding:19px;box-shadow:var(--shadow)}.card .label{font-size:12px;color:var(--muted)}.card .num{font-size:27px;font-weight:800;color:var(--violet);margin-top:8px}
 .panel{background:#fff;border:1px solid #eadfea;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px}.panel h2{margin:0 0 15px;color:var(--violet);font:700 19px Georgia,serif}.panel h3{color:var(--violet);margin:0 0 10px}
 .section-title{display:flex;align-items:center;gap:8px;padding:10px 13px;background:linear-gradient(90deg,#f0e2f2,#fbf8fc);border-radius:11px;color:var(--violet);font-weight:800;margin:4px 0 15px}
-table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #eee7ef;text-align:left;font-size:13px;vertical-align:middle}th{color:#6c5a70;font-size:11px;text-transform:uppercase;letter-spacing:.6px}tr:hover td{background:#fcf9fd}
+table{width:100%;border-collapse:collapse}.table-wrap{max-width:100%;overflow-x:auto}th,td{padding:12px 10px;border-bottom:1px solid #eee7ef;text-align:left;font-size:13px;vertical-align:middle}th{color:#6c5a70;font-size:11px;text-transform:uppercase;letter-spacing:.6px}tr:hover td{background:#fcf9fd}
 .birthday-today td,.birthday-today:hover td{background:#fff0cb;color:#694500;font-weight:700}.birthday-today td:first-child{border-left:4px solid #d49a22}.birthday-today.birthday-reminder{background:#fff0cb;color:#694500;border-left:4px solid #d49a22;padding:10px 12px;border-radius:8px}.birthday-today .birthday-label{display:inline-block;margin-left:8px;font-size:11px;color:#694500}
 .badge{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.ok{background:#e6f2eb;color:var(--ok)}.pending{background:#fff0d7;color:var(--warn)}.bad{background:#f8e3e7;color:var(--danger)}.neutral{background:#eee8f0;color:#65596a}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:var(--muted)}.empty{padding:25px;text-align:center;color:var(--muted)}
@@ -302,6 +302,12 @@ function monthlyDueDate(student,month){
  const lastDay=new Date(year,m,0).getDate();
  return month+'-'+String(Math.min(day,lastDay)).padStart(2,'0');
 }
+function monthlyDayDate(month,day){
+ if(!/^\d{4}-\d{2}$/.test(month||''))return '';
+ const number=Number(day);if(!Number.isInteger(number)||number<1||number>31)return '';
+ const [year,m]=month.split('-').map(Number);if(m<1||m>12)return '';
+ return month+'-'+String(Math.min(number,new Date(year,m,0).getDate())).padStart(2,'0');
+}
 const esc=s=>String(s??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
 const nameCollator=new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true});
 const byName=rows=>rows.slice().sort((a,b)=>nameCollator.compare(a.nome||'',b.nome||''));
@@ -477,7 +483,7 @@ async function loadSupabaseDb(){
  next.students=map('alunas',data.alunas,r=>({nome:r.nome,nasc:r.data_nascimento||'',cpf:r.cpf||'',rg:r.rg||'',fone:r.telefone||'',email:r.email||'',endereco:r.endereco||'',foto:r.foto_url||'',respNome:r.responsavel_nome||'',respCpf:r.responsavel_cpf||'',respFone:r.responsavel_telefone||'',respParentesco:r.responsavel_parentesco||'',menor:r.menor,status:r.status,mensalidade:r.dados_fenix?.mensalidade??null,turmaIds:data.matriculas_turmas.filter(m=>m.aluna_id===r.id&&m.status==='ativa').map(m=>byId.turmas[m.turma_id]).filter(Boolean)}));
  next.observations=sharedObservations.filter(r=>byId.alunas[r.aluna_id]).map(r=>({id:r.id,studentId:byId.alunas[r.aluna_id],authorId:r.autora_id,author:r.autora_nome||'Professora',content:r.conteudo,createdAt:r.created_at}));
  for(const s of next.students){s.modalidades=[...new Set(s.turmaIds.map(id=>next.classes.find(c=>c.id===id)?.modalidade).filter(Boolean))];}
- const finance=map('financeiro',data.financeiro,r=>({studentId:byId.alunas[r.aluna_id]||null,aluno:next.students.find(s=>s.id===byId.alunas[r.aluna_id])?.nome||r.descricao,nome:r.descricao,comp:r.descricao,valor:Number(r.valor||0),venc:r.vencimento||'',pago:r.status==='pago',data:r.pago_em?String(r.pago_em).slice(0,10):'',forma:r.forma_pagamento||'',_tipo:r.tipo,_status:r.status,_pagoEm:r.pago_em||null}));
+ const finance=map('financeiro',data.financeiro,r=>({studentId:byId.alunas[r.aluna_id]||null,aluno:next.students.find(s=>s.id===byId.alunas[r.aluna_id])?.nome||r.descricao,nome:r.descricao,comp:r.tipo==='saida'?(r.dados_fenix?.comp||String(r.vencimento||'').slice(0,7)):r.descricao,valor:Number(r.valor||0),venc:r.vencimento||'',pago:r.status==='pago',data:r.pago_em?String(r.pago_em).slice(0,10):'',forma:r.forma_pagamento||'',_tipo:r.tipo,_status:r.status,_pagoEm:r.pago_em||null}));
  next.payments=finance.filter(r=>r._tipo!=='saida');next.expenses=finance.filter(r=>r._tipo==='saida');
  next.events=map('eventos',data.eventos,r=>({nome:r.nome,data:r.data,local:r.local||'',obs:r.observacao||'',turmaId:byId.turmas[r.turma_id]||'',status:r.dados_fenix?.status||'Planejado'}));
  next.commemorative=map('datas_comemorativas',data.datas_comemorativas,r=>({nome:r.nome,data:r.data,obs:r.observacao||''}));
@@ -489,8 +495,15 @@ async function loadSupabaseDb(){
  // Commit only after every requested table loaded; never expose another user's cache.
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
- if(admin)syncBirthdayRoster();
- // Loading is read-only: financial corrections require an explicit reviewed edit.
+ if(admin){
+  syncBirthdayRoster();
+  // Materialize only the current month's approved recurring charges, once per student/series.
+  // If a pending recovery copy exists, defer these writes until it is reviewed.
+  if(!pendingRecoveryCache?.value?.pending){
+   const generated=await gerarLancamentosRecorrentesDoMes();
+   if(generated){try{await save();}catch(err){setSaveStatus('Cobranças recorrentes não foram salvas: '+err.message,'bad');}}
+  }
+ }
 }
 let lastSharedDataRefreshAt=0;
 async function refreshSharedData({automatic=false}={}){
@@ -546,7 +559,7 @@ async function saveRecord(collection,row){
  }
  if(collection==='payments'||collection==='expenses'){
   if(!Number.isFinite(Number(row.valor))||Number(row.valor)<0)throw new Error('Informe um valor válido.');
-  fields={tipo:collection==='expenses'?'saida':row._tipo||'mensalidade',descricao:row.comp||row.nome||row.aluno,valor:Number(row.valor),vencimento:row.venc||null,status:row.pago?'pago':(['negociado','cancelado'].includes(row._status)?row._status:'em_aberto'),pago_em:row.pago?(old?.pago&&old.data===row.data?row._pagoEm:row.data?row.data+'T12:00:00-03:00':null):null};
+  fields={tipo:collection==='expenses'?'saida':row._tipo||'mensalidade',descricao:collection==='expenses'?row.nome:row.comp||row.nome||row.aluno,valor:Number(row.valor),vencimento:row.venc||null,status:row.pago?'pago':(['negociado','cancelado'].includes(row._status)?row._status:'em_aberto'),pago_em:row.pago?(old?.pago&&old.data===row.data?row._pagoEm:row.data?row.data+'T12:00:00-03:00':null):null};
   if(collection==='payments'){fields.aluna_id=row.outroRecebimento===true&&!row.studentId?null:remote('alunas',row.studentId);fields.forma_pagamento=row.forma||null;}
  }
  if(collection==='events'&&!row.turmaId)throw new Error('Selecione a turma do evento.');
@@ -564,8 +577,14 @@ async function saveRecord(collection,row){
  if(session.tipo==='teacher'&&collection==='attendance'){
   rpc='fenix_salvar_aula_professora';params={p_id:id,p_turma:fields.turma_id,p_data:fields.data,p_versao:Number(row._version||0),p_presencas:links.presencas,p_dados:fields.dados_fenix};
  }
- const {data,error}=await supabaseClient.rpc(rpc,params);
- if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':collection==='classes'&&error.code==='23505'&&/uq_turma_horario_ativo/.test(error.message||'')?`Já existe uma turma ativa em ${row.dia} às ${row.hora}. Confira o horário ou edite a turma existente.`:error.message);
+ let {data,error}=await supabaseClient.rpc(rpc,params);
+ if(error&&error.code==='40001'&&['payments','expenses'].includes(collection)&&row._geradaAutomaticamente){
+  const check=await supabaseClient.from(table).select('id,tipo,aluna_id,descricao,valor,vencimento,status,pago_em,fenix_version,dados_fenix').eq('id',id).maybeSingle();
+  const current=check?.data;
+  const same=current&&current.id===id&&current.tipo===fields.tipo&&current.aluna_id===(fields.aluna_id??null)&&current.descricao===fields.descricao&&Number(current.valor)===fields.valor&&current.vencimento===fields.vencimento&&current.status==='em_aberto'&&!current.pago_em&&current.dados_fenix?.comp===row.comp&&current.dados_fenix?.recorrenciaId===row.recorrenciaId;
+  if(!check.error&&same){row._version=Number(current.fenix_version||0);row._pagoEm=current.pago_em;row._status=current.status;data={id,fenix_version:row._version};}
+  else throw new Error(error.message||'Conflito de versão');
+ }else if(error)throw new Error(error.code==='PGRST202'?'O banco precisa receber a atualização de salvamento. Nenhum sucesso foi confirmado.':collection==='classes'&&error.code==='23505'&&/uq_turma_horario_ativo/.test(error.message||'')?`Já existe uma turma ativa em ${row.dia} às ${row.hora}. Confira o horário ou edite a turma existente.`:error.message);
  if(!data||data.id!==id||!Number.isInteger(data.fenix_version))throw new Error('O banco não confirmou o salvamento.');
  row._version=data.fenix_version;
  if(collection==='payments'||collection==='expenses'){row._pagoEm=fields.pago_em;row._status=fields.status;}
@@ -856,10 +875,17 @@ presenca:()=>{const ats=session?.tipo==="teacher"?db.attendance.filter(a=>visibl
  `<div class="panel"><table><tr><th>Data</th><th>Turma</th><th>Dia da turma</th><th>Horário da turma</th><th>Professora</th><th>Presentes</th><th>Faltas</th><th></th></tr>${ats.slice().sort((a,b)=>b.data.localeCompare(a.data)).map(a=>{const pres=Array.isArray(a.pres)?a.pres:[], turma=db.classes.find(c=>teacherIdMatches(c.id,a.turmaId));return `<tr><td>${dateBR(a.data)}</td><td>${esc(turma?.nome||"—")}</td><td>${esc(turma?.dia||"—")}</td><td>${esc(turma?.hora||"—")}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,a.profId))?.nome||"—")}</td><td>${pres.filter(x=>x).length}</td><td>${pres.length-pres.filter(x=>x).length}</td><td><button class="btn" onclick="abrirPresenca(${a.id})">Abrir</button></td></tr>`}).join("")||tableEmpty(8)}</table></div>`},
 experimentais:()=>{const xs=(db.experimental||[]).filter(x=>session?.tipo!=="teacher"||teacherIdMatches(x.profId,session.teacherId)||teacherIdMatches(x.profId,remoteIds["professoras:"+session.teacherId+":local"]));return head("Aulas experimentais",experimentalAvailable?"Agende uma vez. A professora acompanha aqui e a confirmação fica pronta para a futura aluna.":"Agendamento indisponível: instale a tabela de aulas experimentais no Supabase.",session?.tipo==="teacher"||!experimentalAvailable?"":`<button class="btn primary" onclick="novaExperimental()">＋ Agendar experimental</button>`)+
  `<div class="panel"><table><tr><th>Aluna(o)</th><th>Modalidade</th><th>Data</th><th>Horário</th><th>Professora</th><th>Status</th><th>Presença</th>${session?.tipo==='admin'?'<th>Matrícula</th><th>Plano</th><th>Confirmação</th>':''}<th></th></tr>${xs.slice().sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora)).map(x=>`<tr><td><strong>${esc(x.nome)}</strong><div class="small muted">${esc(x.fone||"")}</div></td><td>${esc(x.modalidade)}</td><td>${dateBR(x.data)}</td><td>${esc(x.hora)}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.nome||"—")}</td><td><span class="badge ${x.status==="Confirmada"?"ok":"pending"}">${esc(x.status||"Agendada")}</span></td><td>${esc(x.presenca||"—")}</td>${session?.tipo==='admin'?`<td>${esc(x.matricula||"—")}</td><td>${esc(x.contratacao||"—")}</td><td>${esc(x.confirmacao||"—")}</td>`:''}<td><button class="btn" onclick="verExperimental(${x.id})">Abrir</button>${session?.tipo==='admin'?` <button class="btn" onclick="verCardExperimental(${x.id})">Card da Fê</button>`:''}${session?.tipo==='admin'&&['Agendada','Confirmada'].includes(x.status||'Agendada')&&x.data>=nowISO()?` <button class="btn" onclick="enviarExperimentalWhatsApp(${x.id})" ${experimentalWhatsAppEmEnvio.has(x.id)?'disabled':''}>${experimentalWhatsAppEmEnvio.has(x.id)?'Enviando…':'Pedir confirmação no WhatsApp'}</button>`:''}</td></tr>`).join("")||tableEmpty(session?.tipo==='admin'?11:8,"Nenhuma aula experimental agendada.")}</table></div>`},
-mensalidades:()=>head("Mensalidades","Contas a receber: mensalidades e taxas de matrícula.",`<div class="actions"><button class="btn" onclick="gerarCobrancasExistentes()">Gerar cobranças das matrículas existentes</button><button class="btn primary" onclick="novaMensalidade()">＋ Nova mensalidade</button></div>`)+
- `<div class="panel"><table><tr><th>Aluno</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Data do pagamento</th><th>Status</th><th>Forma</th><th></th></tr>${db.payments.filter(p=>!p.outroRecebimento&&!financePartnerMonthly(p)&&!financeCheckin(p)&&financeStatus(p)!=='cancelado').sort((a,b)=>(b.venc||"").localeCompare(a.venc||"")).map(p=>`<tr><td>${esc(p.aluno)}</td><td>${esc(p.comp||"—")}</td><td>${money(p.valor)}</td><td>${dateBR(p.venc)||"A definir"}</td><td>${p.pago?(dateBR(p.data)||"Não informada"):"—"}</td><td>${financeBadge(p)}</td><td>${esc(p.forma||"—")}${p.tipoMensalidade==="VIP"?` · <span class="badge neutral">VIP</span>`:""}</td><td>${financePending(p)?`<button class="btn primary" onclick="receber(${p.id})">Receber</button>`:""} <button class="btn" onclick="editarDatasMensalidade(${p.id})">Editar datas</button></td></tr>`).join("")||tableEmpty(8)}</table></div>`,
-contas:()=>head("Contas a pagar","Controle de despesas, vencimentos e pagamentos.",`<button class="btn primary" onclick="novaConta()">＋ Nova conta</button>`)+
- `<div class="panel"><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr>${db.expenses.slice().sort((a,b)=>(a.venc||"").localeCompare(b.venc||"")).map(e=>`<tr><td>${esc(e.nome)}</td><td>${esc(e.cat||"—")}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td>${financeBadge(e,true)}</td><td>${e.pago?`<span class="small muted">${dateBR(e.data)}</span>`:financePending(e)?`<button class="btn" onclick="pagarConta(${e.id})">Marcar paga</button>`:'—'}</td></tr>`).join("")||tableEmpty(6)}</table></div>`,
+mensalidades:()=>head("Mensalidades","Contas a receber: mensalidades e taxas de matrícula.",`<div class="actions"><button class="btn primary" onclick="novaMensalidade()">＋ Nova mensalidade</button></div>`)+
+ `<p class="small muted">A mensalidade do mês é gerada automaticamente ao abrir o Fênix para matrículas ativas com data de matrícula, valor e vencimento definidos.</p>`+
+ `<div class="panel"><div class="table-wrap"><table><tr><th>Aluno</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Data do pagamento</th><th>Status</th><th>Forma</th><th></th></tr>${db.payments.filter(p=>!p.outroRecebimento&&!financePartnerMonthly(p)&&!financeCheckin(p)&&financeStatus(p)!=='cancelado').sort((a,b)=>(b.venc||"").localeCompare(a.venc||"")).map(p=>`<tr><td>${esc(p.aluno)}</td><td>${esc(p.comp||"—")}</td><td>${money(p.valor)}</td><td>${dateBR(p.venc)||"A definir"}</td><td>${p.pago?(dateBR(p.data)||"Não informada"):"—"}</td><td>${financeBadge(p)}</td><td>${esc(p.forma||"—")}${p.tipoMensalidade==="VIP"?` · <span class="badge neutral">VIP</span>`:""}</td><td>${financePending(p)?`<button class="btn primary" onclick="receber(${p.id})">Receber</button>`:""} <button class="btn" onclick="editarDatasMensalidade(${p.id})">Editar datas</button></td></tr>`).join("")||tableEmpty(8)}</table></div></div>`,
+contas:()=>{
+ const rows=list=>list.slice().sort((a,b)=>(a.venc||'').localeCompare(b.venc||'')).map(e=>`<tr><td><strong>${esc(e.nome)}</strong>${e._geradaAutomaticamente?'<div class="small muted">Gerada automaticamente</div>':''}</td><td>${esc(e.cat||'—')}</td><td>${dateBR(e.venc)}</td><td>${money(e.valor)}</td><td>${financeBadge(e,true)}</td><td>${e.pago?`<span class="small muted">${dateBR(e.data)}</span>`:financePending(e)?`<button class="btn" onclick="pagarConta(${e.id})">Marcar paga</button>`:''} <button class="btn" onclick="novaConta(${e.id})">Editar</button></td></tr>`).join('')||tableEmpty(6);
+ const permanent=db.expenses.filter(e=>e.tipoDespesa==='permanente'),variable=db.expenses.filter(e=>e.tipoDespesa==='variavel'),unclassified=db.expenses.filter(e=>!['permanente','variavel'].includes(e.tipoDespesa));
+ return head('Contas a pagar','Despesas permanentes se repetem mensalmente; variáveis são lançadas quando ocorrerem.',`<button class="btn primary" onclick="novaConta()">＋ Nova conta</button>`)+
+ `<div class="panel"><h2>Permanentes</h2><p class="small muted">A próxima conta é criada automaticamente ao abrir o Fênix no novo mês. Cada mês pode ser editado separadamente.</p><div class="table-wrap"><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr>${rows(permanent)}</table></div></div>`+
+ `<div class="panel"><h2>Variáveis</h2><div class="table-wrap"><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr>${rows(variable)}</table></div></div>`+
+ (unclassified.length?`<div class="panel"><h2>Sem classificação</h2><p class="small muted">Contas antigas. Edite cada uma para classificá-la como permanente ou variável.</p><div class="table-wrap"><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr>${rows(unclassified)}</table></div></div>`:'');
+},
 financeiro:()=>{
  const m=nowISO().slice(0,7), inc=db.payments.filter(p=>p.pago&&p.data?.startsWith(m)).reduce((a,p)=>a+Number(p.valor),0), out=db.expenses.filter(e=>e.pago&&e.data?.startsWith(m)).reduce((a,e)=>a+Number(e.valor),0);
  const formas=["Pix","Débito","Dinheiro","Transferência"], vals=formas.map(f=>db.payments.filter(p=>p.pago&&p.forma===f&&p.data?.startsWith(m)).reduce((a,p)=>a+Number(p.valor),0)), max=Math.max(...vals,1);
@@ -1026,6 +1052,46 @@ function novaMatricula(id){
  document.getElementById("studentForm").onsubmit=async e=>{e.preventDefault();await saveAluno(e,id)};
 }
 function collectChecks(fd,name){return fd.getAll(name)}
+function isCheckinPartnerStudent(student){
+ const checkin=String(student?.checkin||'').trim().toLowerCase();
+ const name=String(student?.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+ return ['wellhub','totalpass','total pass'].includes(checkin)||['wellhub','totalpass','total pass'].includes(name);
+}
+async function stableFinanceRemoteId(key){
+ const namespace=Uint8Array.from('6ba7b8109dad11d180b400c04fd430c8'.match(/../g),x=>parseInt(x,16));
+ const name=Uint8Array.from([...('fenix-finance-v1:'+key)].map(x=>x.charCodeAt(0))),input=new Uint8Array(namespace.length+name.length);input.set(namespace);input.set(name,namespace.length);
+ const hash=new Uint8Array(await crypto.subtle.digest('SHA-1',input));hash[6]=(hash[6]&15)|80;hash[8]=(hash[8]&63)|128;
+ const hex=[...hash.slice(0,16)].map(x=>x.toString(16).padStart(2,'0')).join('');
+ return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+}
+async function gerarLancamentosRecorrentesDoMes(){
+ requireAdmin();
+ const month=nowISO().slice(0,7);let count=0;
+ for(const student of db.students){
+  if(student.status==='inativo'||student.matriculaExcluidaEm||isCheckinPartnerStudent(student))continue;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(student.dataMatricula||'')||student.dataMatricula.slice(0,7)>month)continue;
+  const value=Number(student.mensalidade);
+  if(student.mensalidade==null||student.mensalidade===''||student.mensalidade==='VIP'||!Number.isFinite(value)||value<=0)continue;
+  const studentRemoteId=remoteForLocal('alunas',student.id);if(!studentRemoteId||!monthlyDueDate(student,month)||db.payments.some(p=>p.studentId===student.id&&p._tipo==='mensalidade'&&p.comp===month))continue;
+  const row={id:uid(),studentId:student.id,aluno:student.nome,comp:month,valor:value,_tipo:'mensalidade',venc:monthlyDueDate(student,month),pago:false,data:'',forma:student.forma||'',tipoMensalidade:'Regular',_geradaAutomaticamente:true};
+  rememberRemoteId('financeiro',row.id,await stableFinanceRemoteId('mensalidade:'+studentRemoteId+':'+month));db.payments.push(row);count++;
+ }
+ const series=new Map();
+ for(const expense of db.expenses){
+  if(!expense.recorrenciaId||expense.recorrencia!=='mensal')continue;
+  const monthKey=expense.comp||String(expense.venc||'').slice(0,7);if(!/^\d{4}-\d{2}$/.test(monthKey))continue;
+  const latest=series.get(String(expense.recorrenciaId));
+  if(!latest||monthKey>(latest.comp||String(latest.venc||'').slice(0,7)))series.set(String(expense.recorrenciaId),expense);
+ }
+ for(const [recorrenciaId,latest] of series){
+  const lastMonth=latest.comp||String(latest.venc||'').slice(0,7);
+  if(latest.recorrenciaAtiva===false||lastMonth>=month||db.expenses.some(e=>String(e.recorrenciaId)===recorrenciaId&&(e.comp||String(e.venc||'').slice(0,7))===month))continue;
+  const due=monthlyDayDate(month,String(latest.venc||'').slice(8,10));if(!due)continue;
+  const row={id:uid(),nome:latest.nome,cat:latest.cat||'',valor:Number(latest.valor),venc:due,obs:latest.obs||'',comp:month,pago:false,data:'',_tipo:'saida',_status:'em_aberto',tipoDespesa:'permanente',recorrencia:'mensal',recorrenciaId,recorrenciaAtiva:true,_geradaAutomaticamente:true};
+  rememberRemoteId('financeiro',row.id,await stableFinanceRemoteId('despesa:'+recorrenciaId+':'+month));db.expenses.push(row);count++;
+ }
+ return count;
+}
 function createEnrollmentReceivables(student,{includeFee=true}={}){
  const date=student.dataMatricula||nowISO(),feeLabel='Matrícula · '+date,month=date.slice(0,7);
  const items=[
@@ -1317,10 +1383,24 @@ function receber(id){
  let p=db.payments.find(x=>x.id==id);openM("Registrar pagamento",`<form id="receiveForm"><p><strong>${esc(p.aluno)}</strong> · ${money(p.valor)}</p><div class="field"><label>Data em que o pagamento foi realizado *</label><input type="date" name="data" value="${nowISO()}" required></div><div class="field"><label>Forma de pagamento</label><select name="forma"><option>Pix</option><option>Débito</option><option>Dinheiro</option></select></div><div class="actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Confirmar pagamento</button></div></form>`);
  document.getElementById("receiveForm").onsubmit=async e=>{e.preventDefault();let fd=new FormData(e.currentTarget);const date=fd.get("data");if(!date){alert("Informe a data em que o pagamento foi realizado.");return;}p.pago=true;p.data=date;p.forma=fd.get("forma");log("Pagamento recebido",p.aluno+" · "+money(p.valor));await save();closeM();render()}
 }
-function novaConta(){
+function novaConta(id){
  requireAdmin();
- openM("Nova conta a pagar",`<form id="expenseForm" class="form-grid"><div class="field full"><label>Descrição *</label><input name="nome" required></div><div class="field"><label>Categoria</label><input name="cat" placeholder="Ex.: aluguel, material, serviço"></div><div class="field"><label>Valor *</label><input type="number" step=".01" name="valor" min="0" required></div><div class="field"><label>Vencimento *</label><input type="date" name="venc" required></div><div class="field"><label>Observação</label><input name="obs"></div><div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar conta</button></div></form>`);
- document.getElementById("expenseForm").onsubmit=async e=>{e.preventDefault();let o=Object.fromEntries(new FormData(e.currentTarget));o.id=Number(document.getElementById("modalbox").dataset.draftId);o.valor=Number(o.valor);o.pago=false;{const draft=db.expenses.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.expenses.push(o);}log("Conta cadastrada",o.nome);await save();closeM();render()}
+ const old=id?db.expenses.find(x=>x.id==id):null;if(id&&!old)return;
+ openM(old?"Editar conta a pagar":"Nova conta a pagar",`<form id="expenseForm" class="form-grid"><div class="field full"><label>Descrição *</label><input name="nome" value="${esc(old?.nome||'')}" required></div><div class="field"><label>Tipo *</label><select name="tipoDespesa" required><option value="" ${old&&!old.tipoDespesa?'selected':'hidden'} disabled>Selecione</option><option value="permanente" ${old?.tipoDespesa==='permanente'?'selected':''}>Permanente · repetir mensalmente</option><option value="variavel" ${old?.tipoDespesa==='variavel'||!old?'selected':''}>Variável · lançamento único</option></select></div><div class="field"><label>Categoria</label><input name="cat" value="${esc(old?.cat||'')}" placeholder="Ex.: aluguel, material, serviço"></div><div class="field"><label>Valor *</label><input type="number" step=".01" name="valor" value="${esc(old?.valor??'')}" min="0" required></div><div class="field"><label>Vencimento *</label><input type="date" name="venc" value="${esc(old?.venc||'')}" required></div><div class="field full"><label>Observação</label><input name="obs" value="${esc(old?.obs||'')}"></div>${old?'<p class="small muted full">A edição vale para este mês. Os lançamentos anteriores permanecem no histórico.</p>':''}<div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar conta</button></div></form>`);
+ const form=document.getElementById('expenseForm');
+ form.onsubmit=async e=>{
+  e.preventDefault();const values=Object.fromEntries(new FormData(e.currentTarget));const expenseId=old?.id||Number(document.getElementById('modalbox').dataset.draftId),tipo=values.tipoDespesa;
+  if(!['permanente','variavel'].includes(tipo)){alert('Escolha se a conta é permanente ou variável.');return;}
+  const comp=values.venc.slice(0,7);let o=old?{...old,...values}:{...values,id:expenseId,pago:false,data:'',_tipo:'saida',_status:'em_aberto'};o.valor=Number(o.valor);o.comp=comp;o._tipo='saida';o.tipoDespesa=tipo;
+  if(tipo==='permanente'){
+   if(!old||old.tipoDespesa!=='permanente'||!old.recorrenciaId)o.recorrenciaId=String(uid());
+   o.recorrencia='mensal';o.recorrenciaAtiva=true;
+   if(db.expenses.some(x=>x.id!==o.id&&String(x.recorrenciaId||'')===String(o.recorrenciaId)&&String(x.comp||x.venc?.slice(0,7)||'')===comp)){alert('Já existe um lançamento desta conta para esse mês. Edite o lançamento existente.');return;}
+  }else if(old?.tipoDespesa==='permanente'){o.recorrenciaAtiva=false;}
+  const index=db.expenses.findIndex(r=>r.id===expenseId);if(index>=0)db.expenses[index]=o;else db.expenses.push(o);
+  log(old?'Conta atualizada':'Conta cadastrada',o.nome+' · '+(tipo==='permanente'?'Permanente':'Variável'));
+  await save();closeM();render();
+ };
 }
 async function pagarConta(id){requireAdmin();let e=db.expenses.find(x=>x.id==id);if(!e||!financePending(e)){alert('Esta conta não está aberta para pagamento.');return;}e.pago=true;e.data=nowISO();log("Conta paga",e.nome+" · "+money(e.valor));await save();render()}
 function novoEvento(id){

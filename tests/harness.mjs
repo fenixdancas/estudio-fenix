@@ -48,6 +48,7 @@ export function app(client=fakeClient(),url='https://example.test/'){
  w.structuredClone=structuredClone;w.alert=x=>alerts.push(x);w.confirm=()=>true;w.matchMedia=()=>({matches:false});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollTo=()=>{};
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'))};
  Object.defineProperty(w.crypto,'randomUUID',{value:()=>webcrypto.randomUUID()});
+ Object.defineProperty(w.crypto,'subtle',{value:webcrypto.subtle});
  w.supabase={createClient:()=>client};w.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true})});
  const script=html.match(/<script>([\s\S]*)<\/script>/)[1].replace('\nstartFenix();','');
  w.eval(script+`\nwindow.testAPI={get db(){return db},set db(x){db=x},get session(){return session},set session(x){session=x},get ids(){return remoteIds},set ids(x){remoteIds=x},set client(x){supabaseClient=x;supabaseReady=true},get pending(){return hasPendingChanges()},get V(){return V},set view(x){view=x},set loaded(x){dataLoaded=x},set owner(x){cacheOwner=x},checkpoint,initSupabase,loadSupabaseDb,save,remoteForLocal,localForRemote,cleanExtra,visibleStudents,visibleClasses,teacherOwnsClass,safePhoto,nowISO,callFenixAppsScript,renderLogin,render,start,logout,uniqueTeachers,teachersMatch,novaMatricula,novaTurma,novoProfessor,novaPresenca,novaMensalidade,novaConta,novoEvento,novaComemorativa,abrirPresenca,abrirAluno,salvarObsProf,visualizarContrato,showPasswordRecovery,exportBackup};`);
