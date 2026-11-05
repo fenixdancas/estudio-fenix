@@ -2,17 +2,35 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {app,fixtures,fakeClient,ids,html} from './harness.mjs';
 async function setup(){const t=app();await t.a.loadSupabaseDb();return t;}
 const writeRpcCalls=t=>t.client.calls.filter(c=>c.type==='rpc'&&c.name!=='fenix_listar_observacoes_compartilhadas');
-test('Loading and refreshing never rewrite legacy financial records',async()=>{
- const client=fakeClient();Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:'2026-10-01',diaVenc:'20'});
- client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',status:'em_aberto',vencimento:'2026-10-01',descricao:'2026-10',valor:255});
- const original=JSON.stringify(client.tables.financeiro);const t=app(client);
+test('Monthly charge is added on the same due day without rolling an open previous month',async()=>{
+ const client=fakeClient();const t=app(client),today=t.a.nowISO(),month=today.slice(0,7),[year,monthNumber]=month.split('-').map(Number),prior=new Date(year,monthNumber-2,1).toISOString().slice(0,7);
+ Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:prior+'-01',diaVenc:'20'});
+ const previousDue=prior+'-20';client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',status:'em_aberto',vencimento:previousDue,descricao:prior,valor:255});
  try{
   await t.a.loadSupabaseDb();await t.a.loadSupabaseDb();
-  assert.equal(JSON.stringify(client.tables.financeiro),original);
-  assert.equal(client.calls.filter(c=>c.type==='rpc'&&c.name!=='fenix_listar_observacoes_compartilhadas').length,0);
-  assert.equal(t.a.db.payments[0].valor,255);assert.equal(t.a.db.payments[0].venc,'2026-10-01');
-  assert.equal(t.a.pending,false);
+  assert.equal(client.tables.financeiro.length,2);
+  const old=client.tables.financeiro.find(p=>p.descricao===prior),current=client.tables.financeiro.find(p=>p.descricao===month);
+  assert.equal(old.status,'em_aberto');assert.equal(old.vencimento,previousDue);assert.equal(old.valor,255);
+  assert.equal(current.status,'em_aberto');assert.equal(current.vencimento,month+'-20');assert.equal(current.valor,255);
+  assert.equal(t.a.db.payments.filter(p=>p.studentId===t.a.db.students[0].id&&p._tipo==='mensalidade').length,2);
  }finally{t.close();}
+});
+test('Monthly generation skips check-in partners and existing current competence',async()=>{
+ const client=fakeClient();const t=app(client),month=t.a.nowISO().slice(0,7);
+ Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:month+'-01',diaVenc:'15'});
+ Object.assign(client.tables.alunas[1].dados_fenix,{dataMatricula:month+'-01',diaVenc:'15',checkin:'Wellhub'});
+ client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000002',aluna_id:ids.student,tipo:'mensalidade',status:'pago',pago_em:month+'-15T12:00:00-03:00',vencimento:month+'-15',descricao:month,valor:255});
+ try{await t.a.loadSupabaseDb();assert.equal(client.tables.financeiro.length,1);assert.equal(t.a.db.payments.length,1);assert.equal(t.a.db.payments[0].pago,true);}finally{t.close();}
+});
+test('Concurrent admin logins generate one monthly charge with a stable finance ID',async()=>{
+ const client=fakeClient(),t1=app(client),t2=app(client),month=t1.a.nowISO().slice(0,7);
+ Object.assign(client.tables.alunas[0].dados_fenix,{diaVenc:'10'});
+ try{
+  await Promise.all([t1.a.loadSupabaseDb(),t2.a.loadSupabaseDb()]);
+  const rows=client.tables.financeiro.filter(p=>p.tipo==='mensalidade'&&p.descricao===month);
+  assert.equal(rows.length,1);assert.equal(rows[0].vencimento,month+'-10');assert.equal(rows[0].status,'em_aberto');
+  assert.equal(t1.w.document.getElementById('saveStatus').textContent,'Salvo no banco');assert.equal(t2.w.document.getElementById('saveStatus').textContent,'Salvo no banco');
+ }finally{t1.close();t2.close();}
 });
 test('Enrollment tuition follows the selected due day while fee keeps enrollment date',async()=>{
  for(const [day,date,expected] of [['10','2026-10-01','2026-10-10'],['20','2026-10-01','2026-10-20'],['30','2026-02-01','2026-02-28'],['30','2028-02-01','2028-02-29']]){
@@ -107,6 +125,24 @@ test('Consecutive new records keep both saved entries instead of replacing the f
    await t.a.loadSupabaseDb();assert.equal(t.a.db[collection].length,2,method+' reload');
   }finally{t.close();}
  }
+});
+test('Permanent expenses are editable and create one new account per month; variable expenses do not repeat',async()=>{
+ const t=await setup();const today=t.a.nowISO(),month=today.slice(0,7),[year,monthNumber]=month.split('-').map(Number),prior=new Date(year,monthNumber-2,1).toISOString().slice(0,7);
+ try{
+  t.a.novaConta();let form=t.w.document.getElementById('expenseForm');form.elements.nome.value='Aluguel';form.elements.tipoDespesa.value='permanente';form.elements.cat.value='Espaço';form.elements.valor.value='1200';form.elements.venc.value=prior+'-10';
+  await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.a.db.expenses.length,1);
+  const id=t.a.db.expenses[0].id;t.a.novaConta(id);form=t.w.document.getElementById('expenseForm');form.elements.nome.value='Aluguel reajustado';form.elements.valor.value='1250';
+  await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.a.db.expenses.length,1);assert.equal(t.a.db.expenses[0].id,id);
+  assert.equal(t.client.tables.financeiro[0].descricao,'Aluguel reajustado');assert.equal(t.client.tables.financeiro[0].dados_fenix.valor,1250);
+  await t.a.loadSupabaseDb();assert.equal(t.a.db.expenses.length,2);
+  const next=t.a.db.expenses.find(e=>e.comp===month);assert.equal(next.nome,'Aluguel reajustado');assert.equal(next.valor,1250);assert.equal(next.tipoDespesa,'permanente');
+  await t.a.loadSupabaseDb();assert.equal(t.a.db.expenses.length,2);
+  t.a.novaConta(next.id);form=t.w.document.getElementById('expenseForm');form.elements.tipoDespesa.value='variavel';await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(await t.w.eval('gerarLancamentosRecorrentesDoMes()'),0);
+  t.a.novaConta();form=t.w.document.getElementById('expenseForm');form.elements.nome.value='Material de aula';form.elements.tipoDespesa.value='variavel';form.elements.valor.value='80';form.elements.venc.value=month+'-12';
+  await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.a.db.expenses.length,3);assert.equal(await t.w.eval('gerarLancamentosRecorrentesDoMes()'),0);
+  t.a.view='contas';t.a.render();const page=t.w.document.getElementById('page').textContent;assert.match(page,/Permanentes/);assert.match(page,/Variáveis/);assert.match(page,/Aluguel reajustado/);assert.match(page,/Material de aula/);
+ }finally{t.close();}
 });
 test('Cancelled finance stays in history without pending totals or payment actions',async()=>{
  const t=app();
