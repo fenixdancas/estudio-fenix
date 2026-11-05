@@ -22,6 +22,20 @@ test('Monthly generation skips check-in partners and existing current competence
  client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000002',aluna_id:ids.student,tipo:'mensalidade',status:'pago',pago_em:month+'-15T12:00:00-03:00',vencimento:month+'-15',descricao:month,valor:255});
  try{await t.a.loadSupabaseDb();assert.equal(client.tables.financeiro.length,1);assert.equal(t.a.db.payments.length,1);assert.equal(t.a.db.payments[0].pago,true);}finally{t.close();}
 });
+test('Trancada enrollment keeps history and stops new monthly charges',async()=>{
+ const client=fakeClient(),t=app(client),month=t.a.nowISO().slice(0,7),prior='2026-09';
+ client.tables.alunas[0].status='trancada';Object.assign(client.tables.alunas[0].dados_fenix,{dataMatricula:'2026-08-01',diaVenc:'20'});
+ client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000003',aluna_id:ids.student,tipo:'mensalidade',status:'em_aberto',descricao:prior,valor:255,vencimento:prior+'-20'});
+ try{
+  await t.a.loadSupabaseDb();
+  assert.equal(t.a.db.students[0].status,'trancada');
+  assert.deepEqual(client.tables.financeiro.filter(p=>p.aluna_id===ids.student).map(p=>({comp:p.descricao,status:p.status,venc:p.vencimento})),[{comp:prior,status:'em_aberto',venc:prior+'-20'}]);
+  t.a.view='alunos';t.a.render();assert.match(t.w.document.getElementById('studentTable').textContent,/Trancada/);
+  t.a.novaMatricula(t.a.db.students[0].id);const form=t.w.document.getElementById('studentForm');
+  assert.equal(form.elements.status.value,'trancada');assert([...form.elements.status.options].some(option=>option.value==='trancada'&&option.textContent==='Trancada'));
+  await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(client.tables.alunas[0].status,'trancada');
+ }finally{t.close();}
+});
 test('Concurrent admin logins generate one monthly charge with a stable finance ID',async()=>{
  const client=fakeClient(),t1=app(client),t2=app(client),month=t1.a.nowISO().slice(0,7);
  Object.assign(client.tables.alunas[0].dados_fenix,{diaVenc:'10'});
@@ -185,6 +199,13 @@ test('Monthly student picker sorts names and follows the selected VIP plan',asyn
   assert.equal(form.elements.tipoMensalidade.value,'Regular');assert.equal(form.elements.valor.value,'255');
  }finally{t.close();}
 });
+test('Trancada enrollment does not appear on new attendance lists',async()=>{
+ const t=await setup();try{
+  t.a.db.students[0].status='trancada';t.w.eval('novaPresenca()');
+  const text=t.w.document.getElementById('attList').textContent;
+  assert.doesNotMatch(text,/Aluna A/);assert.match(text,/Nenhuma aluna vinculada/);
+ }finally{t.close();}
+});
 test('IDs loaded from Supabase round-trip without insertion',async()=>{const t=await setup();const s=t.a.db.students[0];assert.equal(t.a.remoteForLocal('alunas',s.id),ids.student);s.obs='Atualizada';await t.a.save();assert.equal(t.client.tables.alunas.length,2);assert.equal(writeRpcCalls(t).length,1);t.close();});
 test('Save and reload preserves health, monthly amount and observations',async()=>{const t=await setup();const s=t.a.db.students[0];s.saudeObs='Nova observação';s.mensalidade=500;s.emergNome='Contato sintético';await t.a.save();await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,500);assert.equal(t.a.db.students[0].saudeObs,'Nova observação');assert.equal(t.a.db.students[0].emergNome,'Contato sintético');assert.equal(t.a.db.students[0].alergias,'Sim');t.close();});
 test('Teacher health summary hides unknown-only selections and lists declared conditions',()=>{
@@ -199,6 +220,14 @@ test('Teacher health summary hides unknown-only selections and lists declared co
  }finally{t.close();}
 });
 test('No hardcoded tuition when source has no amount',async()=>{const t=app();delete t.client.tables.alunas[0].dados_fenix.mensalidade;await t.a.loadSupabaseDb();assert.equal(t.a.db.students[0].mensalidade,null);t.close();});
+test('New enrollment created as trancada does not create initial charges',async()=>{
+ const t=await setup();try{
+  t.a.novaMatricula();const form=t.w.document.getElementById('studentForm');
+  form.elements.status.value='trancada';form.elements.nome.value='Aluna pausada';form.querySelector('input[name="modalidades"]').checked=true;form.querySelector('input[name="turmaIds"]').checked=true;
+  await form.onsubmit({preventDefault(){},currentTarget:form});
+  assert.equal(t.client.tables.alunas.at(-1).status,'trancada');assert.equal(t.client.tables.financeiro.length,0);
+ }finally{t.close();}
+});
 test('New enrollment creates separate receivables once and does not invent VIP amounts',async()=>{
  for(const vip of [false,true]){
   const t=await setup();t.a.novaMatricula();const f=t.w.document.getElementById('studentForm');

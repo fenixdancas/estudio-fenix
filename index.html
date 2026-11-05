@@ -836,6 +836,11 @@ function visibleClasses(){
 function visibleStudents(){
  return byName(db.students.filter(s=>!s.matriculaExcluidaEm&&(session?.tipo!=="teacher"||teacherOwnsStudent(s))));
 }
+function matriculaStatusInfo(status){
+ if(status==='trancada')return {label:'Trancada',badge:'pending'};
+ if(status==='inativo')return {label:'Inativa',badge:'neutral'};
+ return {label:'Ativa',badge:'ok'};
+}
 function applyAccess(){
  const teacher=session?.tipo==="teacher";
  const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];
@@ -914,7 +919,7 @@ function bind(){
  if(view==="alunos"){
   const input=document.getElementById("studentSearch");
   const draw=()=>{let q=(input.value||"").toLowerCase();let a=visibleStudents().filter(s=>(s.nome+" "+(s.fone||"")+" "+(s.numeroMatricula||"")).toLowerCase().includes(q));
-  document.getElementById("studentTable").innerHTML=session?.tipo==="teacher"?`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Status</th><th></th></tr>${a.filter(teacherOwnsStudent).map(s=>`<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td><span class="badge ${s.status==='inativo'?'neutral':'ok'}">${s.status==='inativo'?'Inativo':'Ativo'}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`).join("")||tableEmpty(8)}</table>`:`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Mensalidade</th><th>Status</th><th></th></tr>${a.map(s=>`<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td>${s.mensalidade==null?"Não informada":s.mensalidade==="VIP"?"VIP":money(s.mensalidade)}</td><td><span class="badge ${s.status==='inativo'?'neutral':'ok'}">${s.status==='inativo'?'Inativo':'Ativo'}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`).join("")||tableEmpty(9)}</table>`};input.oninput=draw;draw();
+  document.getElementById("studentTable").innerHTML=session?.tipo==="teacher"?`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Status</th><th></th></tr>${a.filter(teacherOwnsStudent).map(s=>{const status=matriculaStatusInfo(s.status);return `<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td><span class="badge ${status.badge}">${status.label}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`}).join("")||tableEmpty(8)}</table>`:`<table><tr><th>Matrícula</th><th>Foto</th><th>Nome</th><th>Contato</th><th>Responsável</th><th>Turma</th><th>Mensalidade</th><th>Status</th><th></th></tr>${a.map(s=>{const status=matriculaStatusInfo(s.status);return `<tr><td><strong>${esc(s.numeroMatricula||"—")}</strong></td><td>${s.foto?`<img class="avatar-img" src="${safePhoto(s.foto)}" alt="">`:`<div class="avatar">${esc((s.nome||"A").slice(0,1).toUpperCase())}</div>`}</td><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.fone||"—")}</td><td>${esc(s.respNome||"—")}</td><td>${esc((Array.isArray(s.turmaIds)?s.turmaIds:(s.turmaId?[s.turmaId]:[])).map(id=>db.classes.find(c=>c.id==id)?.nome).filter(Boolean).join(", ")||"—")}</td><td>${s.mensalidade==null?"Não informada":s.mensalidade==="VIP"?"VIP":money(s.mensalidade)}</td><td><span class="badge ${status.badge}">${status.label}</span></td><td><button class="btn" onclick="abrirAluno(${s.id})">Abrir ficha</button></td></tr>`}).join("")||tableEmpty(9)}</table>`};input.oninput=draw;draw();
  }
  if(view==="busca"){
   const input=document.getElementById("globalSearch"), out=document.getElementById("searchResults");
@@ -975,7 +980,7 @@ function novaMatricula(id){
  <div class="field"><label>Dia de vencimento *</label><select name="diaVenc">${opts(dias,s.diaVenc)}</select></div>
  <div class="field"><label>Forma de pagamento</label><select name="forma">${opts(formas,s.forma)}</select></div>
  <div class="field"><label>Check-in</label><select name="checkin">${opts(checkins,s.checkin)}</select></div>
- <div class="field"><label>Status da matrícula</label><select id="studentStatus" name="status"><option value="ativo" ${s.status!=="inativo"?"selected":""}>Ativa</option><option value="inativo" ${s.status==="inativo"?"selected":""}>Inativa</option></select></div>
+ <div class="field"><label>Status da matrícula</label><select id="studentStatus" name="status"><option value="ativo" ${!['inativo','trancada'].includes(s.status)?"selected":""}>Ativa</option><option value="trancada" ${s.status==="trancada"?"selected":""}>Trancada</option><option value="inativo" ${s.status==="inativo"?"selected":""}>Inativa</option></select></div>
  <div id="desligamentoCampos" class="field full" style="${s.status==="inativo"?"":"display:none"}"><div class="form-grid">
    <div class="field"><label>Data do desligamento *</label><input type="date" id="dataDesligamento" name="dataDesligamento" value="${esc(s.dataDesligamento||"")}"></div>
    <div class="field"><label>Motivo da saída *</label><input id="motivoSaida" name="motivoSaida" value="${esc(s.motivoSaida||"")}" placeholder="Informe o motivo"></div>
@@ -1068,7 +1073,7 @@ async function gerarLancamentosRecorrentesDoMes(){
  requireAdmin();
  const month=nowISO().slice(0,7);let count=0;
  for(const student of db.students){
-  if(student.status==='inativo'||student.matriculaExcluidaEm||isCheckinPartnerStudent(student))continue;
+  if(student.status!=='ativo'||student.matriculaExcluidaEm||isCheckinPartnerStudent(student))continue;
   if(student.dataMatricula&&(!/^\d{4}-\d{2}-\d{2}$/.test(student.dataMatricula)||student.dataMatricula.slice(0,7)>month))continue;
   const value=Number(student.mensalidade);
   if(student.mensalidade==null||student.mensalidade===''||student.mensalidade==='VIP'||!Number.isFinite(value)||value<=0)continue;
@@ -1093,6 +1098,7 @@ async function gerarLancamentosRecorrentesDoMes(){
  return count;
 }
 function createEnrollmentReceivables(student,{includeFee=true}={}){
+ if(student.status!=='ativo')return;
  const date=student.dataMatricula||nowISO(),feeLabel='Matrícula · '+date,month=date.slice(0,7);
  const items=[
   {comp:feeLabel,valor:includeFee&&String(student.valorMatricula)==='60'?60:null,_tipo:'entrada',venc:date},
@@ -1107,7 +1113,7 @@ function createEnrollmentReceivables(student,{includeFee=true}={}){
 async function gerarCobrancasExistentes(){
  requireAdmin();
  if(hasPendingChanges()){alert('Salve as alterações pendentes antes de gerar cobranças.');return;}
- const candidates=db.students.filter(s=>s.dataMatricula&&s.status!=='inativo');
+ const candidates=db.students.filter(s=>s.dataMatricula&&s.status==='ativo');
  const before=db.payments.length;
  for(const student of candidates)createEnrollmentReceivables(student,{includeFee:false});
  const count=db.payments.length-before;
@@ -1130,9 +1136,9 @@ async function saveAluno(e,id){
  if(mensalidadeOpcao==="outro"&&(!o.mensalidade||!Number.isFinite(Number(o.mensalidade))||Number(o.mensalidade)<0)){alert("Digite um valor válido para a mensalidade.");return;}
  o.mensalidade=mensalidadeOpcao==="VIP"?"VIP":Number(mensalidadeOpcao==="outro"?o.mensalidade:mensalidadeOpcao);delete o.mensalidadeOpcao;
  const statusAnterior=old?.status||"ativo";
- if(o.status!=="inativo"){o.status="ativo";o.dataDesligamento="";o.motivoSaida="";}o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(e.currentTarget.dataset.draftId||document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||o.numeroMatricula||""):(o.numeroMatricula||"MAT-"+String(o.id));
+ if(!['ativo','inativo','trancada'].includes(o.status))o.status="ativo";if(o.status!=="inativo"){o.dataDesligamento="";o.motivoSaida="";}o.menor=!!o.nasc&&new Date(o.nasc+"T12:00:00")>new Date(new Date().getFullYear()-18,new Date().getMonth(),new Date().getDate());o.id=id||Number(e.currentTarget.dataset.draftId||document.getElementById("modalbox").dataset.draftId);o.numeroMatricula=id?(db.students.find(s=>s.id==id)?.numeroMatricula||o.numeroMatricula||""):(o.numeroMatricula||"MAT-"+String(o.id));
  if(id) Object.assign(db.students.find(s=>s.id==id),o); else {const draft=db.students.find(r=>r.id===o.id);if(draft)Object.assign(draft,o);else db.students.push(o);}
- if(id&&statusAnterior!=="inativo"&&o.status==="inativo")log("Matrícula inativada",o.nome+" · "+o.numeroMatricula+" · "+o.dataDesligamento+" · "+o.motivoSaida);else if(id&&statusAnterior==="inativo"&&o.status==="ativo")log("Matrícula reativada",o.nome+" · "+o.numeroMatricula);else log(id?"Matrícula atualizada":"Nova matrícula",o.nome);
+ if(id&&statusAnterior!==o.status)log(o.status==='inativo'?"Matrícula inativada":o.status==='trancada'?"Matrícula trancada":"Matrícula reativada",o.nome+" · "+o.numeroMatricula+(o.status==='inativo'?" · "+o.dataDesligamento+" · "+o.motivoSaida:""));else log(id?"Matrícula atualizada":"Nova matrícula",o.nome);
  if(!id)createEnrollmentReceivables(o);
  await save();closeM();render();visualizarContrato(o.id);
 }
@@ -1223,8 +1229,8 @@ function novaPresenca(){
  <div class="field"><label>Turma *</label><select name="turmaId" id="attTurma" required>${visibleClasses().map(c=>`<option value="${c.id}">${esc(c.nome)} · ${esc(c.dia||"Dia não informado")} · ${esc(c.hora||"Horário não informado")}</option>`).join("")}</select></div></div>
  <div id="attList" class="att-grid"></div><div class="field"><label>Observação da aula</label><textarea name="obs"></textarea></div>
  <div class="actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar presença</button></div></form>`);
- const list=()=>{let id=+document.getElementById("attTurma").value, st=db.students.filter(s=>(Array.isArray(s.turmaIds)?s.turmaIds.map(Number):[Number(s.turmaId)]).includes(id));document.getElementById("attList").innerHTML=st.map(s=>`<div class="att-item"><label>${esc(s.nome)}</label><select name="status_${s.id}"><option value="Presente">Presente</option><option value="Ausente">Ausente</option><option value="Falta justificada">Falta justificada</option><option value="Atestado médico">Atestado médico</option></select></div>`).join("")||'<p class="muted">Nenhuma aluna vinculada a esta turma.</p>'};document.getElementById("attTurma").onchange=list;list();
- document.getElementById("attForm").onsubmit=async e=>{e.preventDefault();let fd=new FormData(e.currentTarget),tid=+fd.get("turmaId");if(session?.tipo==="teacher"&&!visibleClasses().some(c=>teacherIdMatches(c.id,tid))){alert("Esta turma não está vinculada a esta professora.");return}let st=db.students.filter(s=>(Array.isArray(s.turmaIds)?s.turmaIds.map(Number):[Number(s.turmaId)]).includes(tid));let statuses=st.map(s=>fd.get("status_"+s.id)||"Ausente");const existing=db.attendance.find(a=>a.data===fd.get("data")&&a.turmaId===tid);let o={...(existing||{}),id:existing?.id||Number(document.getElementById("modalbox").dataset.draftId),data:fd.get("data"),turmaId:tid,profId:db.classes.find(c=>c.id==tid)?.profId||"",status:statuses,pres:statuses.map(x=>x==="Presente"),studentIds:st.map(s=>s.id),obs:fd.get("obs")};if(existing)Object.assign(existing,o);else db.attendance.push(o);log("Lista de presença registrada",db.classes.find(c=>c.id==tid)?.nome||"");await save();closeM();render()}
+ const list=()=>{let id=+document.getElementById("attTurma").value, st=db.students.filter(s=>s.status!=='trancada'&&(Array.isArray(s.turmaIds)?s.turmaIds.map(Number):[Number(s.turmaId)]).includes(id));document.getElementById("attList").innerHTML=st.map(s=>`<div class="att-item"><label>${esc(s.nome)}</label><select name="status_${s.id}"><option value="Presente">Presente</option><option value="Ausente">Ausente</option><option value="Falta justificada">Falta justificada</option><option value="Atestado médico">Atestado médico</option></select></div>`).join("")||'<p class="muted">Nenhuma aluna vinculada a esta turma.</p>'};document.getElementById("attTurma").onchange=list;list();
+ document.getElementById("attForm").onsubmit=async e=>{e.preventDefault();let fd=new FormData(e.currentTarget),tid=+fd.get("turmaId");if(session?.tipo==="teacher"&&!visibleClasses().some(c=>teacherIdMatches(c.id,tid))){alert("Esta turma não está vinculada a esta professora.");return}let st=db.students.filter(s=>s.status!=='trancada'&&(Array.isArray(s.turmaIds)?s.turmaIds.map(Number):[Number(s.turmaId)]).includes(tid));let statuses=st.map(s=>fd.get("status_"+s.id)||"Ausente");const existing=db.attendance.find(a=>a.data===fd.get("data")&&a.turmaId===tid);let o={...(existing||{}),id:existing?.id||Number(document.getElementById("modalbox").dataset.draftId),data:fd.get("data"),turmaId:tid,profId:db.classes.find(c=>c.id==tid)?.profId||"",status:statuses,pres:statuses.map(x=>x==="Presente"),studentIds:st.map(s=>s.id),obs:fd.get("obs")};if(existing)Object.assign(existing,o);else db.attendance.push(o);log("Lista de presença registrada",db.classes.find(c=>c.id==tid)?.nome||"");await save();closeM();render()}
 }
 function abrirPresenca(id){
  if(session?.tipo!=="admin"&&!db.attendance.some(a=>a.id==id&&visibleClasses().some(c=>c.id==a.turmaId)))throw new Error("Turma não autorizada.");
