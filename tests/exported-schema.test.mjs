@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
+test('Trancada is an allowed enrollment status in the exported schema',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/20261105213847_adicionar_status_matricula_trancada.sql'));
+  const inserted=await db.query("insert into alunas(nome,status) values ('Matrícula pausada','trancada') returning status");
+  assert.equal(inserted.rows[0].status,'trancada');
+ }finally{await db.close();}
+});
 test('Migration and admin event tested with exported columns, constraints, triggers and RLS',async()=>{
  const db=new PGlite();
  try {

@@ -4,7 +4,7 @@ create role anon; create role authenticated; create role service_role; create sc
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema public,auth to authenticated,anon;
 create type public."papel_usuario" as enum ('admin','professora');
-create type public."status_ativo" as enum ('ativo','inativo');
+create type public."status_ativo" as enum ('ativo','inativo','trancada');
 create type public."visibilidade_observacao" as enum ('privada','compartilhada','administrativa');
 create type public."status_presenca" as enum ('presente','ausente');
 create type public."status_matricula" as enum ('ativa','encerrada','transferida','cancelada');
