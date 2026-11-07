@@ -39,7 +39,7 @@ test('Database index allows changing monthly amounts and prevents only duplicate
  const db=new PGlite();try{
   await db.exec(read('./schema-export.sql'));
   await db.exec(read('../supabase/migrations/202609230001_fenix_persistencia.sql'));
-  await db.exec(read('../supabase/migrations/20261107150000_outros_recebimentos_mensais.sql'));
+  await db.exec(read('../supabase/migrations/20261107135732_outros_recebimentos_mensais.sql'));
   const add=(origin,month,amount)=>db.query("insert into financeiro(tipo,descricao,valor,status,dados_fenix) values('entrada',$1,$2,'pago',$3)",[origin,amount,JSON.stringify({outroRecebimento:true,origem:origin,recorrenciaId:'parceiro:'+origin.toLocaleLowerCase('pt-BR').replace(/\s+/g,'-'),competencia:month})]);
   await add('Wellhub','2026-10',237.45);
   await add('Wellhub','2026-11',315.80);
