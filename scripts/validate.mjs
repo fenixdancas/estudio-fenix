@@ -17,7 +17,7 @@ for (const file of ["logo-fenix.png", "logo-fenix-marca.png", "fenix-elemento.pn
 const requiredViews = [
   "painel", "alunos", "professores", "turmas", "presenca",
   "mensalidades", "contas", "financeiro", "eventos",
-  "aniversarios", "busca", "historico", "config"
+  "aniversarios", "interessadas", "busca", "historico", "config"
 ];
 
 for (const view of requiredViews) {
