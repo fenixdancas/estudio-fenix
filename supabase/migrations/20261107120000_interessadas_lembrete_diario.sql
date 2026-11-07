@@ -49,7 +49,7 @@ returns jsonb language plpgsql security invoker set search_path='' as $$
 declare
  current_row jsonb; result jsonb;
  columns_sql text; values_sql text; assignment_sql text;
- allowed text[] := array['nome','telefone','modalidade','canal_contato','origem','origem_detalhe','observacoes','status','dados_fenix','updated_at'];
+ allowed text[] := array['nome','telefone','modalidade','canal_contato','origem','origem_detalhe','observacoes','status','dados_fenix'];
 begin
  if auth.uid() is null or public.meu_papel() <> 'admin'::public.papel_usuario then raise exception 'Ação administrativa'; end if;
  if p_id is null or p_versao<0 or jsonb_typeof(p_dados)<>'object' then raise exception 'Registro inválido'; end if;
