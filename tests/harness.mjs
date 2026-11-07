@@ -9,7 +9,7 @@ export function fixtures(){return {
  turmas:[{id:ids.class,nome:'Ballet A',modalidade_id:ids.mod,dia_semana:1,horario:'18:00',professora_id:ids.teacher,status:'ativo'},{id:ids.class2,nome:'Ballet B',modalidade_id:ids.mod,dia_semana:2,horario:'19:00',professora_id:ids.teacher2,status:'ativo'}],
  alunas:[{id:ids.student,nome:'Aluna A',status:'ativo',dados_fenix:{mensalidade:255,alergias:'Sim',saudeObs:'Informação sintética',obs:'Adaptação',objetivos:['Lazer']}},{id:ids.student2,nome:'Aluna B',status:'ativo',dados_fenix:{mensalidade:335}}],
  matriculas_turmas:[{id:'m1',aluna_id:ids.student,turma_id:ids.class,status:'ativa'},{id:'m2',aluna_id:ids.student2,turma_id:ids.class2,status:'ativa'}],
- financeiro:[],eventos:[],datas_comemorativas:[],feriados:[],aulas:[],presencas:[],observacoes:[],perfis:[],comunicacoes:[],contratos:[]};}
+ financeiro:[],eventos:[],datas_comemorativas:[],feriados:[],aulas:[],presencas:[],observacoes:[],perfis:[],comunicacoes:[],contratos:[],interessadas:[],revisoes_contatos_diarias:[]};}
 export function fakeClient(tables=fixtures()){
  const calls=[];let failure=null;
  const client={tables,calls,fail(value){failure=value;},auth:{getSession:async()=>({data:{session:{access_token:'synthetic-test-token'}}}),signOut:async()=>({}),onAuthStateChange(fn){this.emitAuth=fn},resetPasswordForEmail:async()=>({}),updateUser:async()=>({})},
@@ -34,7 +34,8 @@ export function fakeClient(tables=fixtures()){
   }
   if(name==='fenix_salvar_observacao_professora')p={p_tabela:'alunas',p_id:p.p_id,p_versao:p.p_versao,p_dados:{dados_fenix:{obs:p.p_obs}}};
   else if(name==='fenix_salvar_aula_professora')p={p_tabela:'aulas',p_id:p.p_id,p_versao:p.p_versao,p_dados:{turma_id:p.p_turma,data:p.p_data,dados_fenix:p.p_dados},p_vinculos:{presencas:p.p_presencas}};
-  else if(name!=='fenix_salvar_registro')return {data:true};
+  else if(name==='fenix_salvar_interessada')p={p_tabela:'interessadas',p_id:p.p_id,p_versao:p.p_versao,p_dados:p.p_dados};
+  else if(!['fenix_salvar_registro','fenix_salvar_interessada'].includes(name))return {data:true};
   const rows=tables[p.p_tabela];let row=rows.find(r=>r.id===p.p_id);
   if(row&&Number(row.fenix_version||0)!==p.p_versao)return {error:{code:'40001',message:'Conflito de versão'}};
   if(!row){row={id:p.p_id};rows.push(row);}if(name==='fenix_salvar_observacao_professora')p.p_dados.dados_fenix={...row.dados_fenix,...p.p_dados.dados_fenix};Object.assign(row,structuredClone(p.p_dados),{fenix_version:p.p_versao+1});
@@ -51,7 +52,7 @@ export function app(client=fakeClient(),url='https://example.test/'){
  Object.defineProperty(w.crypto,'subtle',{value:webcrypto.subtle});
  w.supabase={createClient:()=>client};w.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true})});
  const script=html.match(/<script>([\s\S]*)<\/script>/)[1].replace('\nstartFenix();','');
- w.eval(script+`\nwindow.testAPI={get db(){return db},set db(x){db=x},get session(){return session},set session(x){session=x},get ids(){return remoteIds},set ids(x){remoteIds=x},set client(x){supabaseClient=x;supabaseReady=true},get pending(){return hasPendingChanges()},get V(){return V},set view(x){view=x},set loaded(x){dataLoaded=x},set owner(x){cacheOwner=x},checkpoint,initSupabase,loadSupabaseDb,save,remoteForLocal,localForRemote,cleanExtra,visibleStudents,visibleClasses,teacherOwnsClass,safePhoto,nowISO,callFenixAppsScript,renderLogin,render,start,logout,uniqueTeachers,teachersMatch,novaMatricula,novaTurma,novoProfessor,novaPresenca,novaMensalidade,novaConta,novoEvento,novaComemorativa,novoFeriado,alternarFeriado,alternarDataComemorativa,commemorativesForYear,holidaysForYear,easterDate,shiftISODate,selecionarAnoCalendario,abrirPresenca,abrirAluno,salvarObsProf,visualizarContrato,showPasswordRecovery,exportBackup};`);
+ w.eval(script+`\nwindow.testAPI={get db(){return db},set db(x){db=x},get session(){return session},set session(x){session=x},get ids(){return remoteIds},set ids(x){remoteIds=x},set client(x){supabaseClient=x;supabaseReady=true},get pending(){return hasPendingChanges()},get V(){return V},set view(x){view=x},set loaded(x){dataLoaded=x},set owner(x){cacheOwner=x},checkpoint,initSupabase,loadSupabaseDb,save,remoteForLocal,localForRemote,cleanExtra,visibleStudents,visibleClasses,teacherOwnsClass,safePhoto,nowISO,callFenixAppsScript,renderLogin,render,start,logout,uniqueTeachers,teachersMatch,novaMatricula,novaTurma,novoProfessor,novaPresenca,novaMensalidade,novaConta,novoEvento,novaComemorativa,novoFeriado,alternarFeriado,alternarDataComemorativa,commemorativesForYear,holidaysForYear,easterDate,shiftISODate,selecionarAnoCalendario,abrirPresenca,abrirAluno,salvarObsProf,visualizarContrato,showPasswordRecovery,exportBackup,novaInteressada,marcarContatosConferidos,applyAccess,go};`);
  const a=w.testAPI;a.client=client;a.session={id:'admin-test',authUserId:'admin-test',nome:'Admin',tipo:'admin'};a.owner='admin-test';
  return {w,a,dom,client,alerts,close(){dom.window.close()}};
 }
