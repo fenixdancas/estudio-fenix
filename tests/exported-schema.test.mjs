@@ -177,7 +177,7 @@ test('Inquiry migration stores admin-only contacts and daily review with version
   await db.exec(read('./schema-export.sql'));
   await db.exec(read('../supabase/migrations/202609230001_fenix_persistencia.sql'));
   await db.exec(read('../supabase/migrations/202609230002_acesso_professoras.sql'));
-  await db.exec(read('../supabase/migrations/20261107120000_interessadas_lembrete_diario.sql'));
+  await db.exec(read('../supabase/migrations/20261107132143_interessadas_lembrete_diario.sql'));
   const admin='00000000-0000-4000-8000-000000000061',teacher='00000000-0000-4000-8000-000000000062',lead='00000000-0000-4000-8000-000000000063';
   await db.query('insert into auth.users(id) values($1),($2)',[admin,teacher]);
   await db.query("insert into perfis(id,nome,papel,status) values($1,'Admin teste','admin','ativo'),($2,'Professora teste','professora','ativo')",[admin,teacher]);
