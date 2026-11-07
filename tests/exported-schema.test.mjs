@@ -12,6 +12,34 @@ test('Trancada is an allowed enrollment status in the exported schema',async()=>
   assert.equal(inserted.rows[0].status,'trancada');
  }finally{await db.close();}
 });
+test('2027 calendar migration seeds approved dates, movable rules and admin holidays separately',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/202609230001_fenix_persistencia.sql'));
+  await db.exec(read('../supabase/migrations/20261106120000_calendario_comemorativo_2027.sql'));
+  await db.exec(read('../supabase/migrations/202611070001_aniversario_estudio_calendario.sql'));
+  const comm=(await db.query('select count(*)::int n from datas_comemorativas')).rows[0].n;
+  const holidays=(await db.query('select count(*)::int n from feriados')).rows[0].n;
+  assert.equal(comm,72);assert.equal(holidays,18);
+  const easter=(await db.query("select data::text from datas_comemorativas where nome='Páscoa'")).rows[0].data;
+  const corpus=(await db.query("select data::text from datas_comemorativas where nome='Corpus Christi'")).rows[0].data;
+  const belly=(await db.query("select data::text from datas_comemorativas where nome='Dia Mundial da Dança do Ventre'")).rows[0].data;
+  const carnival=(await db.query("select dados_fenix->>'data_fim' data_fim from datas_comemorativas where nome='Carnaval'")).rows[0].data_fim;
+  assert.equal(easter,'2027-03-28');assert.equal(corpus,'2027-05-27');assert.equal(belly,'2027-05-08');assert.equal(carnival,'2027-02-09');
+  const holyFriday=(await db.query("select tipo,abrangencia from feriados where nome like 'Paixão de Cristo%' ")).rows[0];
+  assert.deepEqual(holyFriday,{tipo:'feriado',abrangencia:'municipal'});
+  const points=(await db.query("select count(*)::int n from feriados where tipo='ponto_facultativo'")).rows[0].n;assert.equal(points,5);
+  const movable=(await db.query("select dados_fenix->'recorrencia'->>'tipo' rule from datas_comemorativas where nome='Dia das Mães'")).rows[0].rule;assert.equal(movable,'dia_semana_mes');
+  const studioAnniversary=(await db.query("select data::text,dados_fenix->>'data_fim' data_fim,dados_fenix->'recorrencia'->>'tipo' rule from datas_comemorativas where nome='Aniversário do Estúdio'")).rows[0];
+  assert.deepEqual(studioAnniversary,{data:'2027-08-16',data_fim:null,rule:'fixa'});
+  assert.equal((await db.query("select public.proximo_dia_util('2027-02-08'::date)::text date")).rows[0].date,'2027-02-08');
+  assert.equal((await db.query("select public.proximo_dia_util('2027-03-26'::date)::text date")).rows[0].date,'2027-03-29');
+  await db.exec(read('../supabase/migrations/202611070001_aniversario_estudio_calendario.sql'));
+  assert.equal((await db.query('select count(*)::int n from datas_comemorativas')).rows[0].n,72);
+  assert.equal((await db.query('select count(*)::int n from feriados')).rows[0].n,18);
+ }finally{await db.close();}
+});
 test('Migration and admin event tested with exported columns, constraints, triggers and RLS',async()=>{
  const db=new PGlite();
  try {
