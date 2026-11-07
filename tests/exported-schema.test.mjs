@@ -170,3 +170,32 @@ test('Public contract token lookup preserves table privacy and recognizes accept
   assert.deepEqual(Object.keys(accepted).sort(),['aceito_em','conteudo','status']);
  }finally{await db.close();}
 });
+
+test('Inquiry migration stores admin-only contacts and daily review with version checks',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(read('./schema-export.sql'));
+  await db.exec(read('../supabase/migrations/202609230001_fenix_persistencia.sql'));
+  await db.exec(read('../supabase/migrations/202609230002_acesso_professoras.sql'));
+  await db.exec(read('../supabase/migrations/20261107120000_interessadas_lembrete_diario.sql'));
+  const admin='00000000-0000-4000-8000-000000000061',teacher='00000000-0000-4000-8000-000000000062',lead='00000000-0000-4000-8000-000000000063';
+  await db.query('insert into auth.users(id) values($1),($2)',[admin,teacher]);
+  await db.query("insert into perfis(id,nome,papel,status) values($1,'Admin teste','admin','ativo'),($2,'Professora teste','professora','ativo')",[admin,teacher]);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]);await db.exec('set role authenticated');
+  const fields={nome:'Contato sintético',telefone:'11999990000',modalidade:'Ballet',canal_contato:'whatsapp',origem:'indicacao',origem_detalhe:'Amiga',observacoes:'Dados de teste',status:'novo',dados_fenix:{}};
+  const save=(version,data=fields)=>db.query('select fenix_salvar_interessada($1,$2,$3) result',[lead,JSON.stringify(data),version]);
+  assert.equal((await save(0)).rows[0].result.fenix_version,1);
+  assert.equal((await db.query('select count(*)::int n from interessadas')).rows[0].n,1);
+  assert.equal((await save(1,{...fields,status:'em_atendimento'})).rows[0].result.fenix_version,2);
+  await assert.rejects(save(1),/mudou em outro acesso/);
+  await assert.rejects(save(2,{...fields,updated_at:'2000-01-01T00:00:00Z'}),/Campo não permitido/);
+  await db.query("insert into revisoes_contatos_diarias(admin_id,revisado_em) values($1,'2026-11-07')",[admin]);
+  assert.equal((await db.query('select count(*)::int n from revisoes_contatos_diarias where admin_id=$1',[admin])).rows[0].n,1);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[teacher]);
+  assert.equal((await db.query('select count(*)::int n from interessadas')).rows[0].n,0);
+  await assert.rejects(db.query("insert into revisoes_contatos_diarias(admin_id,revisado_em) values($1,'2026-11-07')",[teacher]),/row-level security/i);
+  await assert.rejects(db.query('select fenix_salvar_interessada($1,$2,0)',[lead,JSON.stringify(fields)]),/Ação administrativa/);
+  await db.exec('reset role; set role anon');
+  await assert.rejects(db.query('select fenix_salvar_interessada($1,$2,0)',[lead,JSON.stringify(fields)]),/permission denied/);
+ }finally{await db.close();}
+});
