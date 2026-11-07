@@ -99,6 +99,75 @@ test('Monthly list hides Wellhub and Totalpass partner entries at any value or s
   assert.doesNotMatch(page,/Wellhub|Totalpass/);
  }finally{t.close();}
 });
+test('Monthly payment tabs show one month at a time and keep an all-months view',async()=>{
+ const t=await setup();
+ try{
+  const current=t.a.nowISO().slice(0,7), priorDate=new Date(current+'-01T12:00:00-03:00');
+  priorDate.setMonth(priorDate.getMonth()-1);
+  const prior=priorDate.getFullYear()+'-'+String(priorDate.getMonth()+1).padStart(2,'0');
+  t.a.db.payments.push(
+   {id:7601,studentId:t.a.db.students[0].id,aluno:'Cobrança atual',comp:current,valor:255,_tipo:'mensalidade',_status:'em_aberto',pago:false,venc:current+'-10'},
+   {id:7602,studentId:t.a.db.students[0].id,aluno:'Cobrança anterior',comp:prior,valor:255,_tipo:'mensalidade',_status:'pago',pago:true,venc:prior+'-10'}
+  );
+  t.a.view='mensalidades';t.a.render();
+  let page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Cobrança atual/);assert.doesNotMatch(page,/Cobrança anterior/);
+  assert.match(t.w.document.getElementById('page').innerHTML,/role="tablist"/);
+  t.w.eval("selecionarMesMensalidade('"+prior+"')");
+  page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Cobrança anterior/);assert.doesNotMatch(page,/Cobrança atual/);
+  t.w.eval("selecionarMesMensalidade('todos')");
+  page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Cobrança anterior/);assert.match(page,/Cobrança atual/);
+ }finally{t.close();}
+});
+test('Accounts payable month tabs reduce rows and preserve the all-months history',async()=>{
+ const t=await setup();
+ try{
+  const current=t.a.nowISO().slice(0,7), priorDate=new Date(current+'-01T12:00:00-03:00');priorDate.setMonth(priorDate.getMonth()-1);
+  const prior=priorDate.getFullYear()+'-'+String(priorDate.getMonth()+1).padStart(2,'0');
+  t.a.db.expenses.push(
+   {id:7701,nome:'Conta atual',cat:'Serviço',valor:100,venc:current+'-10',comp:current,tipoDespesa:'permanente',_status:'em_aberto',pago:false},
+   {id:7702,nome:'Conta anterior',cat:'Serviço',valor:100,venc:prior+'-10',comp:prior,tipoDespesa:'permanente',_status:'pago',pago:true}
+  );
+  t.a.view='contas';t.a.render();let page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Conta atual/);assert.doesNotMatch(page,/Conta anterior/);
+  t.w.eval("selecionarMesContas('"+prior+"')");page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Conta anterior/);assert.doesNotMatch(page,/Conta atual/);
+  t.w.eval("selecionarMesContas('todos')");page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Conta anterior/);assert.match(page,/Conta atual/);
+ }finally{t.close();}
+});
+test('Experimental classes separate upcoming appointments from history',async()=>{
+ const t=await setup(),today=t.a.nowISO(),pastDate=new Date(today+'T12:00:00'),futureDate=new Date(today+'T12:00:00');
+ pastDate.setDate(pastDate.getDate()-1);futureDate.setDate(futureDate.getDate()+3);
+ const past=pastDate.toISOString().slice(0,10),future=futureDate.toISOString().slice(0,10);
+ try{
+  t.a.db.experimental.push(
+   {id:7801,nome:'Experimental próxima',fone:'11900000001',modalidade:'Ballet',data:future,hora:'10:00',profId:t.a.db.teachers[0].id,status:'Confirmada'},
+   {id:7802,nome:'Experimental antiga',fone:'11900000002',modalidade:'Jazz',data:past,hora:'11:00',profId:t.a.db.teachers[0].id,status:'Realizada'}
+  );
+  t.a.view='experimentais';t.a.render();let page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Experimental próxima/);assert.doesNotMatch(page,/Experimental antiga/);
+  t.w.eval("selecionarAbaExperimental('historico')");page=t.w.document.getElementById('page').textContent;
+  assert.match(page,/Experimental antiga/);assert.doesNotMatch(page,/Experimental próxima/);
+ }finally{t.close();}
+});
+test('Attendance filters by class and month without losing history',async()=>{
+ const t=await setup(),current=t.a.nowISO().slice(0,7),priorDate=new Date(current+'-01T12:00:00-03:00');
+ priorDate.setMonth(priorDate.getMonth()-1);const prior=priorDate.getFullYear()+'-'+String(priorDate.getMonth()+1).padStart(2,'0');
+ try{
+  t.a.db.attendance.push(
+   {id:7901,data:current+'-10',turmaId:t.a.db.classes[0].id,profId:t.a.db.teachers[0].id,pres:[true],studentIds:[t.a.db.students[0].id]},
+   {id:7902,data:prior+'-10',turmaId:t.a.db.classes[1].id,profId:t.a.db.teachers[1].id,pres:[false],studentIds:[t.a.db.students[1].id]}
+  );
+  t.a.view='presenca';t.a.render();let page=[...t.w.document.querySelectorAll('#page table tr')].map(row=>row.textContent).join(' ');
+  assert.match(page,/10\/.*2026/);assert.match(page,/Ballet A/);assert.doesNotMatch(page,/Ballet B/);
+  t.w.eval("selecionarMesPresenca('todos')");t.w.eval("selecionarTurmaPresenca('"+t.a.db.classes[1].id+"')");
+  page=[...t.w.document.querySelectorAll('#page table tr')].map(row=>row.textContent).join(' ');assert.match(page,/Ballet B/);assert.doesNotMatch(page,/Ballet A/);
+  assert.match(t.w.document.getElementById('page').innerHTML,/Filtrar presença por turma/);assert.match(t.w.document.getElementById('page').innerHTML,/Filtrar presença por mês/);
+ }finally{t.close();}
+});
 test('Payment date stays separate from due date through receipt, edits and reload',async()=>{
  const t=app();
  t.client.tables.financeiro.push({id:'50000000-0000-4000-8000-000000000001',aluna_id:ids.student,tipo:'mensalidade',descricao:'2026-10',valor:255,status:'em_aberto',vencimento:'2026-10-01',pago_em:null});
@@ -317,11 +386,30 @@ test('Class schedule collision explains the conflict without claiming a save',as
 });
 test('Teacher cannot edit other student or tuition',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.db.students[0].mensalidade=1;await assert.rejects(t.a.save(),/somente/);t.close();});
 test('Teacher search excludes unrelated student and staff data',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher,nome:'Professora'};t.a.view='busca';t.a.render();const input=t.w.document.getElementById('globalSearch');input.value='Aluna';input.oninput();assert.match(t.w.document.getElementById('searchResults').textContent,/Aluna A/);assert(!t.w.document.getElementById('searchResults').textContent.includes('Aluna B'));t.close();});
-test('Administrative entry points reject teacher calls',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher};for(const f of ['novaMatricula','novoProfessor','novaTurma','novaMensalidade','novaConta','novoEvento','novaComemorativa','exportBackup'])assert.throws(()=>t.a[f](),/administrativo/);t.close();});
+test('Administrative entry points reject teacher calls',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher};for(const f of ['novaMatricula','novoProfessor','novaTurma','novaMensalidade','novaConta','novoEvento','novaComemorativa','novoFeriado','exportBackup'])assert.throws(()=>t.a[f](),/administrativo/);t.close();});
 test('Attendance viewer rejects unrelated class',async()=>{const t=await setup();t.a.session={tipo:'teacher',teacherId:ids.teacher};t.a.db.attendance.push({id:9,turmaId:t.a.db.classes[1].id});assert.throws(()=>t.a.abrirPresenca(9),/autorizada/);t.close();});
 test('HTTP 500, HTML 200 and ok=false are rejected',async()=>{const t=await setup();for(const response of [{ok:false,status:500},{ok:true,json:async()=>{throw Error('HTML')}},{ok:true,json:async()=>({ok:false,error:'denied'})}]){t.w.fetch=async()=>response;await assert.rejects(t.a.callFenixAppsScript('test'));}t.close();});
 test('Photos reject scripts and SVG and escape URL attributes',()=>{const t=app();assert.equal(t.a.safePhoto('javascript:alert(1)'), '');assert.equal(t.a.safePhoto('data:image/svg+xml,<svg onload=alert(1)>'),'');assert(!t.a.safePhoto('https://example.test/" onerror="x').includes('"'));t.close();});
 test('Event and commemorative forms use currentTarget and persist',async()=>{const t=await setup();for(const [method,formId,coll] of [['novoEvento','eventForm','events'],['novaComemorativa','commForm','commemorative']]){t.a[method]();const form=t.w.document.getElementById(formId);form.elements.nome.value='Evento sintético';form.elements.data.value='2026-10-10';await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.a.db[coll][0].nome,'Evento sintético');}t.close();});
+test('Calendar calculates Easter-related dates and nth-weekday anniversaries for future years',async()=>{
+ const t=app();
+ t.client.tables.datas_comemorativas.push({id:'70000000-0000-4000-8000-000000000001',nome:'Dia das Mães',data:'2027-05-09',observacao:'Segundo domingo de maio',ativo:true,dados_fenix:{origem:'calendario_aprovado_2027',recorrencia:{tipo:'dia_semana_mes',mes:5,weekday:0,ordem:2},classificacoes:['comemoracao']}});
+ t.client.tables.feriados.push({id:'70000000-0000-4000-8000-000000000002',data:'2027-02-08',nome:'Carnaval',abrangencia:'federal',tipo:'ponto_facultativo',ativo:true,dados_fenix:{recorrencia:{tipo:'pascoa_intervalo',inicio:-48,fim:-47},data_fim:'2027-02-09'}});
+ await t.a.loadSupabaseDb();
+ assert.equal(t.w.eval("easterDate(2027)"),'2027-03-28');
+ assert.equal(t.a.commemorativesForYear(2028)[0].data,'2028-05-14');
+ const carnival=t.a.holidaysForYear(2028)[0];assert.equal(carnival.data,'2028-02-28');assert.equal(carnival.data_fim,'2028-02-29');
+ t.a.view='aniversarios';t.a.render();assert.match(t.w.document.getElementById('page').textContent,/Calendário administrativo/);assert.match(t.w.document.getElementById('page').textContent,/Ponto facultativo/);t.close();
+});
+test('Administrators can add, edit and deactivate separate calendar entries',async()=>{
+ const t=await setup();
+ t.a.novaComemorativa();let form=t.w.document.getElementById('commForm');form.elements.nome.value='Aniversário do Estúdio';form.elements.data.value='2027-08-16';
+ await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.client.tables.datas_comemorativas[0].dados_fenix.recorrencia.tipo,'fixa');
+ t.a.novoFeriado();form=t.w.document.getElementById('holidayForm');form.elements.nome.value='Feriado sintético';form.elements.data.value='2027-03-26';form.elements.abrangencia.value='municipal';
+ await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.client.tables.feriados[0].abrangencia,'municipal');
+ const id=t.a.db.holidays[0].id;await t.a.alternarFeriado(id);assert.equal(t.client.tables.feriados[0].ativo,false);await t.a.alternarFeriado(id);assert.equal(t.client.tables.feriados[0].ativo,true);
+ await t.a.loadSupabaseDb();assert.equal(t.a.db.holidays[0].nome,'Feriado sintético');t.close();
+});
 test('Failed new event retry reuses same draft identity',async()=>{const t=await setup();t.a.novoEvento();const form=t.w.document.getElementById('eventForm');form.elements.nome.value='Evento';form.elements.data.value='2026-10-10';t.client.fail({message:'offline'});await assert.rejects(form.onsubmit({preventDefault(){},currentTarget:form}));t.client.fail(null);await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(t.a.db.events.length,1);assert.equal(t.client.tables.eventos.length,1);t.close();});
 test('All 13 administrative views render and wire without error',async()=>{const t=await setup();for(const view of Object.keys(t.a.V)){t.a.view=view;t.a.render();assert(t.w.document.getElementById('page').textContent.trim());}t.close();});
 test('Contract preview keeps unsaved enrollment form',async()=>{const t=await setup();t.a.novaMatricula();const form=t.w.document.getElementById('studentForm');form.elements.nome.value='Rascunho';t.a.visualizarContrato(0);assert.equal(t.w.document.getElementById('studentForm').elements.nome.value,'Rascunho');t.close();});
