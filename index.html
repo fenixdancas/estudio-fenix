@@ -107,6 +107,7 @@ table{width:100%;border-collapse:collapse}.table-wrap{max-width:100%;overflow-x:
 </style><style>
 /* Audit: readable forms, clear save state and keyboard accessibility. */
 .save-status{position:sticky;top:72px;z-index:9;padding:10px 28px;background:#f1e6f3;color:#4d164f;min-height:40px;font-size:13px}
+.lead-callout{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;padding:16px 18px;border:1px solid #d9c4df;border-left:5px solid var(--violet2);border-radius:14px;background:#f5edf7}.lead-callout p{margin:5px 0 0;color:var(--muted)}
 .save-status.bad{background:#fce8ed;color:#7a2035}.save-status.ok{background:#e6f2eb;color:#25563e}
 .panel{overflow-x:auto}button:disabled{opacity:.6;cursor:wait}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #c68a2b!important;outline-offset:3px}
@@ -171,6 +172,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <button data-view="financeiro">◈ <span>Financeiro</span></button>
       <button data-view="eventos">◇ <span>Eventos</span></button>
       <button data-view="aniversarios">☆ <span>Aniversários e datas</span></button>
+      <button data-view="interessadas">✉ <span>Interessadas</span></button>
       <div class="nav-title">Consulta</div>
       <button data-view="busca">⌕ <span>Busca</span></button>
       <button data-view="historico">◷ <span>Histórico</span></button>
@@ -285,7 +287,7 @@ let experimentalAvailable = false;
 const DEFAULT = {
  users:{nahid:{nome:"Nahid",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.nahid},tati:{nome:"Tati",tipo:"admin",email:SUPABASE_CONFIG.adminEmails.tati}},
  students:[], teachers:[], classes:[], payments:[], expenses:[], events:[], commemorative:[], holidays:[], observations:[],
- attendance:[], experimental:[], history:[]
+ attendance:[], experimental:[], history:[], leads:[], contactReviews:[]
 };
 
 let db = structuredClone(DEFAULT);
@@ -401,7 +403,7 @@ function initSupabase(){
 }
 
 // Persistence contract v1. Writes require the reviewed Supabase migration.
-const COLLECTIONS={teachers:'professoras',classes:'turmas',students:'alunas',payments:'financeiro',expenses:'financeiro',events:'eventos',commemorative:'datas_comemorativas',holidays:'feriados',attendance:'aulas'};
+const COLLECTIONS={teachers:'professoras',classes:'turmas',students:'alunas',payments:'financeiro',expenses:'financeiro',events:'eventos',commemorative:'datas_comemorativas',holidays:'feriados',attendance:'aulas',leads:'interessadas'};
 let baseline={}, syncPromise=null, dataLoaded=false, cacheOwner=null;
 let refreshPromise=null;
 const clone=x=>JSON.parse(JSON.stringify(x));
@@ -562,8 +564,10 @@ async function loadSupabaseDb(){
  const checkSession=()=>{if(session!==loadingSession||sessionEpoch!==loadingEpoch)throw new Error('A sessão terminou. Entre novamente.');};
  const admin=session.tipo==='admin';
  const names=['professoras','modalidades','turmas','alunas','matriculas_turmas','aulas','presencas'];
- if(admin)names.push('financeiro','eventos','datas_comemorativas','feriados','fenix_auditoria');
+ if(admin)names.push('financeiro','eventos','datas_comemorativas','feriados','fenix_auditoria','interessadas');
  const data=Object.fromEntries(await Promise.all(names.map(async name=>[name,await sbSelect(name)])));
+ let contactReviews=[];
+ if(admin){const review=await supabaseClient.from('revisoes_contatos_diarias').select('admin_id,revisado_em').eq('admin_id',loadingSession.authUserId).eq('revisado_em',nowISO()).maybeSingle();if(review.error)throw new Error('Não foi possível consultar a conferência diária. '+review.error.message);if(review.data)contactReviews=[review.data];}
  const sharedObservations=await loadSharedObservations();
  checkSession();
  // This optional table is deployed separately. Keep the rest of the system usable until then.
@@ -598,6 +602,10 @@ async function loadSupabaseDb(){
  });
  // Commit only after every requested table loaded; never expose another user's cache.
  next.history=(data.fenix_auditoria||[]).map(r=>({id:r.id,at:r.created_at,user:r.ator===session.authUserId?session.nome:'Equipe Fênix',action:r.acao,detail:r.tabela}));
+ if(admin){
+  next.leads=map('interessadas',data.interessadas,r=>({nome:r.nome,telefone:r.telefone,modalidade:r.modalidade,canalContato:r.canal_contato,origem:r.origem,origemDetalhe:r.origem_detalhe||'',observacoes:r.observacoes||'',status:r.status,criadoEm:r.created_at,atualizadoEm:r.updated_at}));
+  next.contactReviews=contactReviews;
+ }
  db=next;dataLoaded=true;checkpoint();saveLocalOnly();setSaveStatus('Dados carregados','ok');
  if(admin){
   syncBirthdayRoster();
@@ -668,14 +676,16 @@ async function saveRecord(collection,row){
  }
  if(collection==='events'&&!row.turmaId)throw new Error('Selecione a turma do evento.');
  if(collection==='events')fields={nome:row.nome,data:row.data,local:row.local||null,observacao:row.obs||null,turma_id:row.turmaId?remote('turmas',row.turmaId):null};
+ if(collection==='leads')fields={nome:row.nome,telefone:row.telefone,modalidade:row.modalidade,canal_contato:row.canalContato,origem:row.origem,origem_detalhe:row.origemDetalhe||null,observacoes:row.observacoes||null,status:row.status,dados_fenix:{}};
  if(collection==='commemorative')fields={nome:row.nome,data:row.data,observacao:row.obs||null,ativo:row.ativo!==false};
  if(collection==='holidays')fields={nome:row.nome,data:row.data,abrangencia:row.abrangencia,tipo:row.tipo||'feriado',ativo:row.ativo!==false};
  if(collection==='attendance'){
   fields={turma_id:remote('turmas',row.turmaId),data:row.data};
   links={presencas:row.studentIds.map((sid,i)=>({aluna_id:remote('alunas',sid),status:row.status[i]==='Presente'?'presente':'ausente',dados_fenix:{status:row.status[i]}}))};
  }
- fields.dados_fenix=session.tipo==='teacher'&&collection==='students'?{obs:row.obs||''}:cleanExtra(row);
+ fields.dados_fenix=collection==='leads'?{}:session.tipo==='teacher'&&collection==='students'?{obs:row.obs||''}:cleanExtra(row);
  let rpc='fenix_salvar_registro', params={p_tabela:table,p_id:id,p_dados:fields,p_versao:Number(row._version||0),p_vinculos:links};
+ if(collection==='leads'){rpc='fenix_salvar_interessada';params={p_id:id,p_dados:fields,p_versao:Number(row._version||0)};}
  if(session.tipo==='teacher'&&collection==='students'){
   rpc='fenix_salvar_observacao_professora';params={p_id:id,p_obs:row.obs||'',p_versao:Number(row._version||0)};
  }
@@ -948,11 +958,11 @@ function matriculaStatusInfo(status){
 }
 function applyAccess(){
  const teacher=session?.tipo==="teacher";
- const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];
+ const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","interessadas","busca","historico","config"];
  document.querySelectorAll(".nav button[data-view]").forEach(b=>{b.style.display=allowed.includes(b.dataset.view)?"":"none"});
  if(!allowed.includes(view))view=teacher?"alunos":"painel";
 }
-function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","busca","historico","config"];if(!allowed.includes(v))return;view=v;render()}
+function go(v){const teacher=session?.tipo==="teacher";const allowed=teacher?["alunos","turmas","presenca","experimentais","busca"]:["painel","alunos","professores","turmas","presenca","experimentais","mensalidades","contas","financeiro","eventos","aniversarios","interessadas","busca","historico","config"];if(!allowed.includes(v))return;view=v;render()}
 function render(){
  if(!session)return;applyAccess();
  document.querySelectorAll(".nav button[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
@@ -968,13 +978,17 @@ painel:()=>{
  const b=db.students.filter(s=>!s.matriculaExcluidaEm&&s.nasc?.slice(5,7)===birthdayMonth).sort((a,b)=>a.nasc.slice(8).localeCompare(b.nasc.slice(8)));
  const commemorativeYear=Number(dashboardDate.slice(0,4));const commemorativeMonthDates=commemorativesForYear(commemorativeYear).filter(c=>c.data?.slice(5,7)===commemorativeMonth).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
  const scheduled=(db.experimental||[]).filter(x=>["Agendada","Confirmada"].includes(x.status||"Agendada")&&x.data>=nowISO()).sort((a,b)=>(a.data+(a.hora||"")).localeCompare(b.data+(b.hora||"")));
- return head("Painel","Visão geral do estúdio.")+
+ const checkedToday=db.contactReviews?.some(r=>r.admin_id===session?.authUserId&&r.revisado_em===dashboardDate);
+ const leadReminder=session?.tipo==='admin'&&!checkedToday?`<div class="lead-callout"><div><strong>Conferir contatos recebidos</strong><p>Veja se chegou alguém pelo WhatsApp ou Instagram e registre para não esquecer o retorno.</p></div><div class="actions"><button class="btn primary" onclick="go('interessadas')">Abrir interessadas</button><button class="btn" onclick="marcarContatosConferidos()">Já conferi hoje</button></div></div>`:'';
+ return head("Painel","Visão geral do estúdio.")+leadReminder+
  `<div class="fe-welcome"><img src="${FE}" alt="Fê"><div><strong>Bem-vinda ao Fênix.</strong><p>A Fê está por aqui para acompanhar o dia do estúdio. 💜</p></div></div>
  <div class="panel"><h2>Aulas experimentais agendadas</h2><div class="table-wrap"><table><tr><th>Aluna(o)</th><th>Modalidade</th><th>Data</th><th>Horário</th><th>Professora</th><th>Status</th><th></th></tr>${scheduled.map(x=>`<tr><td><strong>${esc(x.nome)}</strong></td><td>${esc(x.modalidade)}</td><td>${dateBR(x.data)}</td><td>${esc(x.hora||"—")}</td><td>${esc(db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.apelido||db.teachers.find(t=>teacherIdMatches(t.id,x.profId))?.nome||"—")}</td><td><span class="badge ${x.status==="Confirmada"?"ok":"pending"}">${esc(x.status||"Agendada")}</span></td><td><button class="btn" onclick="verExperimental(${x.id})">Abrir</button>${session?.tipo==='admin'?` <button class="btn" onclick="verCardExperimental(${x.id})">Card da Fê</button>`:''}</td></tr>`).join("")||tableEmpty(7,"Nenhuma aula experimental agendada.")}</table></div></div>
  <div class="panel"><h2>Aniversariantes do mês</h2>${b.length?b.map(s=>`<p class="birthday-reminder ${isBirthdayToday(s.nasc)?'birthday-today':''}">${esc(s.nasc.slice(8,10))}/${birthdayMonth} · <strong>${esc(s.nome)}</strong>${isBirthdayToday(s.nasc)?'<span class="birthday-label">🎂 Hoje</span>':''}</p>`).join(""):`<p class="muted">Nenhum aniversário cadastrado para este mês.</p>`}</div>
  <div class="panel"><h2>Datas comemorativas do mês</h2>${commemorativeMonthDates.length?commemorativeMonthDates.map(c=>`<p>${esc(c.data.slice(8,10))}/${commemorativeMonth} · <strong>${esc(c.nome)}</strong>${c.obs?` · ${esc(c.obs)}`:""}</p>`).join(""):`<p class="muted">Nenhuma data comemorativa cadastrada para este mês.</p>`}</div>`;
 },
 
+ interessadas:()=>head("Interessadas","Registre quem pediu informações e acompanhe o retorno.",'<button class="btn primary" onclick="novaInteressada()">＋ Novo contato</button>')+
+ `<div class="panel"><div class="toolbar"><input id="interessadaSearch" class="search" placeholder="Buscar nome, celular, modalidade ou origem"><span class="muted">${db.leads.length} contato(s)</span></div><div id="interessadasTable"></div></div>`,
 alunos:()=>head("Alunos","Cadastros, fichas, saúde, contrato e histórico.",session?.tipo==="teacher"?"":`<div class="actions"><button class="btn" onclick="verMatriculasExcluidas()">Matrículas excluídas</button><button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button></div>`)+
  `<div class="panel"><div class="toolbar"><input id="studentSearch" class="search" placeholder="Buscar por nome ou WhatsApp"><span class="muted">${visibleStudents().length} aluno(s)</span></div><div id="studentTable"></div></div>`,
 professores:()=>head("Professores","Cadastro dos professores e classes vinculadas.",`<button class="btn primary" onclick="novoProfessor()">＋ Novo professor</button>`)+
@@ -1015,7 +1029,47 @@ config:()=>head("Configurações","Usuários, senhas e dados básicos do sistema
  <div class="panel"><h2>Dados</h2><p class="muted">Exporte uma cópia dos dados para guardar no Google Drive ou em outro local seguro. Cópias pendentes podem ser exportadas para recuperação sem substituir os dados atuais.</p><div class="actions"><button class="btn" onclick="exportBackup()">Exportar dados</button><button class="btn" onclick="exportPending()">Exportar cópia pendente deste aparelho</button></div></div>`
 };
 
+const leadOriginLabels={indicacao:'Indicação',instagram:'Instagram',facebook:'Facebook',wellhub:'Wellhub',totalpass:'TotalPass',google:'Google',outros:'Outros'};
+const leadStatusLabels={novo:'Novo contato',em_atendimento:'Em atendimento',experimental:'Aula experimental agendada',matriculada:'Matriculada',sem_avanco:'Sem avanço'};
+function novaInteressada(id){
+ requireAdmin();
+ const current=id==null?null:db.leads.find(r=>String(r.id)===String(id));
+ const row=current||{nome:'',telefone:'',modalidade:'',canalContato:'whatsapp',origem:'indicacao',origemDetalhe:'',observacoes:'',status:'novo'};
+ const originOptions=Object.entries(leadOriginLabels).map(([value,label])=>`<option value="${value}" ${row.origem===value?'selected':''}>${label}</option>`).join('');
+ const statusOptions=Object.entries(leadStatusLabels).map(([value,label])=>`<option value="${value}" ${row.status===value?'selected':''}>${label}</option>`).join('');
+ openM(current?'Editar contato':'Novo contato',`<form id="leadForm" class="form-grid">
+  <div class="field full"><label>Nome da pessoa *</label><input name="nome" maxlength="200" value="${esc(row.nome)}" required></div>
+  <div class="field"><label>Celular / WhatsApp *</label><input name="telefone" type="tel" maxlength="30" value="${esc(row.telefone)}" placeholder="DDD + número" required></div>
+  <div class="field"><label>Modalidade de interesse *</label><input name="modalidade" maxlength="120" value="${esc(row.modalidade)}" placeholder="Ex.: ballet, jazz, dança do ventre" required></div>
+  <div class="field"><label>Por onde chamou? *</label><select name="canalContato"><option value="whatsapp" ${row.canalContato==='whatsapp'?'selected':''}>WhatsApp</option><option value="direct" ${row.canalContato==='direct'?'selected':''}>Direct do Instagram</option></select></div>
+  <div class="field"><label>Como conheceu a escola? *</label><select id="leadOrigin" name="origem" required>${originOptions}</select></div>
+  <div class="field full" id="leadOriginDetailWrap" style="${['indicacao','outros'].includes(row.origem)?'':'display:none'}"><label id="leadOriginDetailLabel">${row.origem==='outros'?'Descreva a origem *':'Quem indicou? (opcional)'}</label><input id="leadOriginDetail" name="origemDetalhe" maxlength="250" value="${esc(row.origemDetalhe)}"></div>
+  <div class="field"><label>Status *</label><select name="status" required>${statusOptions}</select></div>
+  <div class="field full"><label>Observações relevantes</label><textarea name="observacoes" maxlength="3000" placeholder="Melhor horário para retorno, dúvidas, faixa etária...">${esc(row.observacoes)}</textarea></div>
+  <div class="full actions" style="justify-content:flex-end"><button type="button" class="btn" onclick="closeM()">Cancelar</button><button class="btn primary">Salvar contato</button></div>
+ </form>`);
+ const form=document.getElementById('leadForm'), origin=form.elements.origem, detail=form.elements.origemDetalhe, wrap=document.getElementById('leadOriginDetailWrap'), label=document.getElementById('leadOriginDetailLabel');
+ const updateDetail=()=>{const show=['indicacao','outros'].includes(origin.value);wrap.style.display=show?'':'none';label.textContent=origin.value==='outros'?'Descreva a origem *':'Quem indicou? (opcional)';detail.required=origin.value==='outros';};
+ origin.onchange=updateDetail;updateDetail();
+ form.onsubmit=async e=>{e.preventDefault();const values=Object.fromEntries(new FormData(form));const next={...row,nome:values.nome.trim(),telefone:values.telefone.trim(),modalidade:values.modalidade.trim(),canalContato:values.canalContato,origem:values.origem,origemDetalhe:values.origemDetalhe.trim(),observacoes:values.observacoes.trim(),status:values.status};
+  if(current)Object.assign(current,next);else db.leads.push({...next,id:uid(),_version:0});
+  try{await save();closeM();render();}catch(err){alert('Não foi possível salvar o contato: '+err.message);}
+ };
+}
+function bindInterested(){
+ const input=document.getElementById('interessadaSearch'),target=document.getElementById('interessadasTable');if(!input||!target)return;
+ const draw=()=>{const q=input.value.trim().toLocaleLowerCase('pt-BR');const rows=db.leads.filter(r=>[r.nome,r.telefone,r.modalidade,leadOriginLabels[r.origem],r.origemDetalhe,r.observacoes,leadStatusLabels[r.status]].join(' ').toLocaleLowerCase('pt-BR').includes(q)).slice().sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+ target.innerHTML=`<div class="table-wrap"><table><tr><th>Contato</th><th>Modalidade</th><th>Canal</th><th>Como conheceu</th><th>Status</th><th>Observações</th><th></th></tr>${rows.map(r=>`<tr><td><strong>${esc(r.nome)}</strong><div class="small muted">${esc(r.telefone)}</div></td><td>${esc(r.modalidade)}</td><td>${r.canalContato==='direct'?'Instagram Direct':'WhatsApp'}</td><td>${esc(leadOriginLabels[r.origem]||r.origem)}${r.origemDetalhe?`<div class="small muted">${esc(r.origemDetalhe)}</div>`:''}</td><td><span class="badge ${r.status==='matriculada'?'ok':r.status==='sem_avanco'?'neutral':'pending'}">${esc(leadStatusLabels[r.status]||r.status)}</span></td><td>${esc(r.observacoes||'—')}</td><td><button class="btn" onclick="novaInteressada(${Number(r.id)})">Editar</button></td></tr>`).join('')||tableEmpty(7,q?'Nenhum contato encontrado.':'Ainda não há contatos registrados.')}</table></div>`;
+ };input.oninput=draw;draw();
+}
+async function marcarContatosConferidos(){
+ requireAdmin();const date=nowISO();
+ try{const {error}=await supabaseClient.from('revisoes_contatos_diarias').insert({admin_id:session.authUserId,revisado_em:date});if(error&&error.code!=='23505')throw new Error(error.message);db.contactReviews=[{admin_id:session.authUserId,revisado_em:date}];render();}
+ catch(err){alert('Não foi possível registrar a conferência de hoje: '+err.message);}
+}
+
 function bind(){
+ if(view==='interessadas')bindInterested();
  if(view==="alunos"){
   const input=document.getElementById("studentSearch");
   const draw=()=>{let q=(input.value||"").toLowerCase();let a=visibleStudents().filter(s=>(s.nome+" "+(s.fone||"")+" "+(s.numeroMatricula||"")).toLowerCase().includes(q));
