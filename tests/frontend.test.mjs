@@ -574,3 +574,32 @@ test('Experimental WhatsApp blocks duplicate in-flight sends and preserves state
   assert.equal(x.status,'Agendada');assert.equal(t.client.tables.comunicacoes.length,0);assert.match(t.alerts.at(-1),/Modelo em análise/);
  }finally{t.close();}
 });
+
+test('Admin registers and edits an inquiry with channel separate from discovery source',async()=>{
+ const t=app();
+ try{
+  await t.a.loadSupabaseDb();t.a.view='interessadas';t.a.render();t.a.novaInteressada();
+  let form=t.w.document.getElementById('leadForm');
+  Object.assign(form.elements.nome,{value:'Contato de teste'});Object.assign(form.elements.telefone,{value:'11999990000'});Object.assign(form.elements.modalidade,{value:'Jazz'});
+  form.elements.canalContato.value='direct';form.elements.origem.value='instagram';form.elements.status.value='em_atendimento';form.elements.observacoes.value='Perguntou sobre horários.';
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(t.client.tables.interessadas.length,1);
+  const row=t.client.tables.interessadas[0];assert.equal(row.canal_contato,'direct');assert.equal(row.origem,'instagram');assert.equal(row.status,'em_atendimento');assert.deepEqual(row.dados_fenix,{});
+  assert(t.client.calls.some(c=>c.type==='rpc'&&c.name==='fenix_salvar_interessada'));
+  await t.a.loadSupabaseDb();t.a.view='interessadas';t.a.render();
+  assert.match(t.w.document.getElementById('interessadasTable').textContent,/Contato de teste/);
+  t.a.novaInteressada(t.a.db.leads[0].id);form=t.w.document.getElementById('leadForm');form.elements.status.value='matriculada';form.elements.observacoes.value='Matrícula concluída.';await form.onsubmit({preventDefault(){}});
+  assert.equal(t.client.tables.interessadas[0].status,'matriculada');assert.equal(t.client.tables.interessadas[0].fenix_version,2);
+  t.a.session={id:'teacher-test',authUserId:'teacher-test',tipo:'teacher',teacherId:ids.teacher};t.a.view='interessadas';t.a.render();
+  assert.equal(t.w.document.querySelector('[data-view="interessadas"]').style.display,'none');assert.doesNotMatch(t.w.document.getElementById('page').textContent,/Novo contato/);
+  t.a.go('interessadas');assert.equal(t.a.V.interessadas!==undefined,true);assert.equal(t.w.document.getElementById('page').textContent.includes('Interessadas'),false);
+ }finally{t.close();}
+});
+
+test('Dashboard daily inquiry reminder is persisted per admin and date',async()=>{
+ const t=app();try{
+  await t.a.loadSupabaseDb();t.a.view='painel';t.a.render();assert.match(t.w.document.getElementById('page').textContent,/Conferir contatos recebidos/);
+  await t.a.marcarContatosConferidos();assert.deepEqual(t.client.tables.revisoes_contatos_diarias.map(r=>({admin_id:r.admin_id,revisado_em:r.revisado_em})),[{admin_id:'admin-test',revisado_em:t.a.nowISO()}]);
+  assert.doesNotMatch(t.w.document.getElementById('page').textContent,/Conferir contatos recebidos/);
+ }finally{t.close();}
+});
