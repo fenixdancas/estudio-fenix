@@ -25,3 +25,12 @@ jobs:
         run: npm run validate
       - name: Executar testes automatizados
         run: npm test
+      - name: Conferir interface em computador e celular
+        run: npm run test:ui
+      - name: Guardar capturas da interface
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-fenix
+          path: test-results/
+          retention-days: 7
