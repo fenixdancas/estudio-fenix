@@ -11,7 +11,25 @@ try{
   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.fulfill({status:200,contentType:'text/javascript',body:''}));
   const tables=fixtures();tables.perfis=[{id:'admin-test',nome:'Admin teste',papel:'admin',status:'ativo',professora_id:null}];
   await page.addInitScript(({tables,fake})=>{window.alerts=[];window.alert=x=>window.alerts.push(x);window.confirm=()=>true;const factory=(0,eval)('('+fake+')');const client=factory(tables);client.auth.signInWithPassword=async()=>({data:{user:{id:'admin-test',email:'admin@example.test'}}});window.testClient=client;window.supabase={createClient:()=>client};},{tables,fake:fakeClient.toString().replaceAll('webcrypto','crypto')});
-  await page.goto(base);await page.locator('#loginPass').fill('synthetic-password');await page.locator('#loginEnter').click();await page.locator('#app').waitFor({state:'visible'});
+  await page.goto(base);
+  for(const id of ['loginUser','loginPass','loginEye','loginEnter','rememberMe','loginForgot']){
+    const control=page.locator('#'+id);assert(await control.isVisible(),id+' is visible');
+    const box=await control.boundingBox();assert(box&&box.x>=0&&box.y>=0&&box.x+box.width<=viewport.width+1,id+' fits the viewport');
+  }
+  const userBox=await page.locator('#loginUser').boundingBox(),passBox=await page.locator('#loginPass').boundingBox(),enterBox=await page.locator('#loginEnter').boundingBox();
+  assert(userBox.y+userBox.height<=passBox.y,'User and password do not overlap');
+  assert(passBox.y+passBox.height<=enterBox.y,'Password and Enter do not overlap');
+  assert.equal(await page.locator('#loginUserValue').isVisible(),false,'No duplicate user overlay');
+  assert.equal(await page.locator('#loginPassPlaceholder').count(),0,'No duplicate password placeholder');
+  await page.locator('#loginUser').selectOption('email');assert(await page.locator('#loginEmail').isVisible());
+  await page.locator('#loginUser').selectOption('nahid');assert.equal(await page.locator('#loginEmail').isVisible(),false);
+  await page.locator('#loginPass').fill('synthetic-password');
+  await page.locator('#loginEye').click();assert.equal(await page.locator('#loginPass').getAttribute('type'),'text');
+  await page.locator('#loginEye').click();assert.equal(await page.locator('#loginPass').getAttribute('type'),'password');
+  await page.locator('#rememberMe').check();assert(await page.locator('#rememberMe').isChecked());
+  await page.locator('#rememberMe').uncheck();
+  await page.screenshot({path:path.join(root,`test-results/login-controls-${viewport.width}.png`),fullPage:true});
+  await page.locator('#loginEnter').click();await page.locator('#app').waitFor({state:'visible'});
   assert.deepEqual(errors,[]);assert.equal(await page.locator('#saveStatus').innerText(),'Dados carregados');
   for(const view of ['alunos','professores','turmas','presenca','mensalidades','contas','financeiro','eventos','aniversarios','interessadas','busca','historico','config']){await page.locator(`button[data-view="${view}"]`).click();assert(await page.locator('#page h1').isVisible());}
   await page.locator('button[data-view="contas"]').click();const currentMonth=await page.evaluate(()=>nowISO().slice(0,7));
