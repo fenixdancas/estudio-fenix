@@ -31,6 +31,15 @@ try{
   await page.screenshot({path:path.join(root,`test-results/login-controls-${viewport.width}.png`),fullPage:true});
   await page.locator('#loginEnter').click();await page.locator('#app').waitFor({state:'visible'});
   assert.deepEqual(errors,[]);assert.equal(await page.locator('#saveStatus').innerText(),'Dados carregados');
+  const cardDimensions=await page.evaluate(async()=>{
+    const src=await gerarCardExperimental({nome:'Ana de teste',modalidade:'Dança do ventre',data:'2026-11-20',hora:'19:30',profId:db.teachers[0]?.id});
+    const image=new Image();image.src=src;await image.decode();
+    openM('Card de teste','<img id="cardPreviewTest" alt="Card experimental de teste" src="'+src+'" style="display:block;width:100%;max-width:520px;margin:auto">');
+    return [image.naturalWidth,image.naturalHeight];
+  });
+  assert.deepEqual(cardDimensions,[1024,1536]);await page.locator('#cardPreviewTest').screenshot({path:path.join(root,`test-results/card-experimental-${viewport.width}.png`)});
+  await page.evaluate(()=>closeM());
+
   for(const view of ['alunos','professores','turmas','presenca','mensalidades','contas','financeiro','eventos','aniversarios','interessadas','busca','historico','config']){await page.locator(`button[data-view="${view}"]`).click();assert(await page.locator('#page h1').isVisible());}
   await page.locator('button[data-view="contas"]').click();const currentMonth=await page.evaluate(()=>nowISO().slice(0,7));
   await page.getByRole('button',{name:'＋ Nova conta'}).click();await page.locator('#expenseForm [name="nome"]').fill('Aluguel teste');await page.locator('#expenseForm [name="tipoDespesa"]').selectOption('permanente');await page.locator('#expenseForm [name="cat"]').fill('Espaço');await page.locator('#expenseForm [name="valor"]').fill('1200');await page.locator('#expenseForm [name="venc"]').fill(currentMonth+'-10');await page.getByRole('button',{name:'Salvar conta',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
