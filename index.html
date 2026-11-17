@@ -977,7 +977,7 @@ painel:()=>{
 },
 
  interessadas:()=>head("Interessadas","Registre quem pediu informações e acompanhe o retorno.",'<button class="btn primary" onclick="novaInteressada()">＋ Novo contato</button>')+
- `<div class="panel"><div class="toolbar"><input id="interessadaSearch" class="search" placeholder="Buscar nome, celular, modalidade ou origem"><span class="muted">${db.leads.length} contato(s)</span></div><div id="interessadasTable"></div></div>`,
+ `<div class="panel"><div id="interessadasTabs" class="month-tabs" role="tablist" aria-label="Situação das interessadas"></div><div class="toolbar"><input id="interessadaSearch" class="search" placeholder="Buscar nome, celular, modalidade ou origem"><span id="interessadasCount" class="muted"></span></div><div id="interessadasTable" role="tabpanel"></div></div>`,
 alunos:()=>head("Alunos","Cadastros, fichas, saúde, contrato e histórico.",session?.tipo==="teacher"?"":`<div class="actions"><button class="btn" onclick="verMatriculasExcluidas()">Matrículas excluídas</button><button class="btn primary" onclick="novaMatricula()">＋ Nova matrícula</button></div>`)+
  `<div class="panel"><div class="toolbar"><input id="studentSearch" class="search" placeholder="Buscar por nome ou WhatsApp"><span class="muted">${visibleStudents().length} aluno(s)</span></div><div id="studentTable"></div></div>`,
 professores:()=>head("Professores","Cadastro dos professores e classes vinculadas.",`<button class="btn primary" onclick="novoProfessor()">＋ Novo professor</button>`)+
@@ -1045,10 +1045,26 @@ function novaInteressada(id){
   try{await save();closeM();render();}catch(err){alert('Não foi possível salvar o contato: '+err.message);}
  };
 }
+let interessadasAba='em_andamento';
+const interessadasAbas=[
+ {key:'matriculada',label:'Matriculada'},
+ {key:'em_andamento',label:'Em andamento'},
+ {key:'experimental',label:'Aula agendada'},
+ {key:'sem_avanco',label:'Sem avanço'}
+];
+function abaInteressada(row){
+ return ['matriculada','experimental','sem_avanco'].includes(row.status)?row.status:'em_andamento';
+}
 function bindInterested(){
  const input=document.getElementById('interessadaSearch'),target=document.getElementById('interessadasTable');if(!input||!target)return;
- const draw=()=>{const q=input.value.trim().toLocaleLowerCase('pt-BR');const rows=db.leads.filter(r=>[r.nome,r.telefone,r.modalidade,leadOriginLabels[r.origem],r.origemDetalhe,r.observacoes,leadStatusLabels[r.status]].join(' ').toLocaleLowerCase('pt-BR').includes(q)).slice().sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
- target.innerHTML=`<div class="table-wrap"><table><tr><th>Contato</th><th>Modalidade</th><th>Canal</th><th>Como conheceu</th><th>Status</th><th>Observações</th><th></th></tr>${rows.map(r=>`<tr><td><strong>${esc(r.nome)}</strong><div class="small muted">${esc(r.telefone)}</div></td><td>${esc(r.modalidade)}</td><td>${r.canalContato==='direct'?'Instagram Direct':'WhatsApp'}</td><td>${esc(leadOriginLabels[r.origem]||r.origem)}${r.origemDetalhe?`<div class="small muted">${esc(r.origemDetalhe)}</div>`:''}</td><td><span class="badge ${r.status==='matriculada'?'ok':r.status==='sem_avanco'?'neutral':'pending'}">${esc(leadStatusLabels[r.status]||r.status)}</span></td><td>${esc(r.observacoes||'—')}</td><td><button class="btn" onclick="novaInteressada(${Number(r.id)})">Editar</button></td></tr>`).join('')||tableEmpty(7,q?'Nenhum contato encontrado.':'Ainda não há contatos registrados.')}</table></div>`;
+ const draw=()=>{const q=input.value.trim().toLocaleLowerCase('pt-BR');const matching=db.leads.filter(r=>[r.nome,r.telefone,r.modalidade,leadOriginLabels[r.origem],r.origemDetalhe,r.observacoes,leadStatusLabels[r.status]].join(' ').toLocaleLowerCase('pt-BR').includes(q));
+ const tabs=document.getElementById('interessadasTabs');
+ tabs.innerHTML=interessadasAbas.map(tab=>`<button id="interessadasTab-${tab.key}" type="button" class="month-tab ${interessadasAba===tab.key?'active':''}" role="tab" aria-selected="${interessadasAba===tab.key}" aria-controls="interessadasTable" data-lead-tab="${tab.key}">${tab.label} <span>${matching.filter(r=>abaInteressada(r)===tab.key).length}</span></button>`).join('');
+ tabs.querySelectorAll('[data-lead-tab]').forEach(button=>{button.onclick=()=>{interessadasAba=button.dataset.leadTab;draw();document.getElementById('interessadasTab-'+interessadasAba)?.focus();};});
+ target.setAttribute('aria-labelledby','interessadasTab-'+interessadasAba);
+ const rows=matching.filter(r=>abaInteressada(r)===interessadasAba).slice().sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+ document.getElementById('interessadasCount').textContent=`${rows.length} contato(s) nesta aba`;
+ target.innerHTML=`<div class="table-wrap"><table><tr><th>Contato</th><th>Modalidade</th><th>Canal</th><th>Como conheceu</th><th>Status</th><th>Observações</th><th></th></tr>${rows.map(r=>`<tr><td><strong>${esc(r.nome)}</strong><div class="small muted">${esc(r.telefone)}</div></td><td>${esc(r.modalidade)}</td><td>${r.canalContato==='direct'?'Instagram Direct':'WhatsApp'}</td><td>${esc(leadOriginLabels[r.origem]||r.origem)}${r.origemDetalhe?`<div class="small muted">${esc(r.origemDetalhe)}</div>`:''}</td><td><span class="badge ${r.status==='matriculada'?'ok':r.status==='sem_avanco'?'neutral':'pending'}">${esc(leadStatusLabels[r.status]||r.status)}</span></td><td>${esc(r.observacoes||'—')}</td><td><button class="btn" onclick="novaInteressada(${Number(r.id)})">Editar</button></td></tr>`).join('')||tableEmpty(7,q?'Nenhum contato encontrado nesta aba.':'Nenhum contato nesta situação.')}</table></div>`;
  };input.oninput=draw;draw();
 }
 async function marcarContatosConferidos(){
