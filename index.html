@@ -85,9 +85,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 </style><style id="feriados-emendas-style">.calendar-holiday-date{color:#9a3e4c;font-weight:800}.calendar-facultativo-date{color:#8a5a12;font-weight:800}.calendar-holiday-flag,.calendar-facultativo-flag{display:inline-flex;margin-top:4px;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.3px}.calendar-holiday-flag{background:#f8e3e7;color:#8c2d3b}.calendar-facultativo-flag{background:#fff0d7;color:#855410}.calendar-bridge-pending{background:#fff0d7;color:#855410}.calendar-bridge-yes{background:#e6f2eb;color:#397a59}.calendar-bridge-no{background:#eee8f0;color:#65596a}</style>
 <style id="login-layout-style">
 /* Real controls: the approved background contains no fields or buttons. */
-.login{min-height:100vh;min-height:100svh;width:100%;background:#eee4ef}
+.login{min-height:100vh;min-height:100svh;width:100%;background:#eee8f0}
 .login-scene{position:relative;min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:flex-end;padding:40px 12% 40px 24px;isolation:isolate}
-.login-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-1;user-select:none}
+.login-art{position:absolute;inset:3% 2%;width:96%;height:94%;object-fit:contain;object-position:center;z-index:-1;user-select:none;filter:url(#login-neutral-light)}
 .login-interactive{position:relative;width:min(370px,100%);display:grid;gap:14px;padding:24px;border:1px solid rgba(255,255,255,.85);border-radius:20px;background:rgba(255,250,255,.94);box-shadow:0 12px 36px rgba(77,22,79,.16)}
 .login-interactive label{margin:0;color:var(--violet);font-size:13px}
 .login-interactive .login-field{display:grid;gap:6px}
@@ -104,19 +104,28 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #loginForgot{border:0;background:transparent;color:var(--violet);padding:8px 0;font-size:12px;text-decoration:underline}
 #loginEmail[hidden],#loginUserValue,#loginUserMenu,#loginRememberMark{display:none!important}
 .login-setup{z-index:200}
-@media(max-width:760px){
+@media(max-width:900px){
  .login-scene{flex-direction:column;justify-content:center;padding:20px;gap:18px}
- .login-art{position:relative;inset:auto;z-index:auto;width:min(520px,100%);height:auto;border-radius:16px;object-fit:contain}
+ .login-art{position:relative;inset:auto;z-index:auto;width:min(480px,100%);height:auto;border-radius:16px;object-fit:contain}
  .login-interactive{width:min(420px,100%);padding:20px}
  .login-setup{position:fixed}
 }
-@media(min-width:761px) and (max-height:560px){.login-scene{padding-top:20px;padding-bottom:20px}}
+@media(min-width:901px) and (max-height:560px){.login-scene{padding-top:20px;padding-bottom:20px}}
 </style>
 </head>
 <body>
 
 <div id="loginScreen" class="login">
   <div class="login-scene">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <filter id="login-neutral-light" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
+          .80 .20 0 0 0
+          .05 .95 0 0 0
+          .13 .07 .80 0 .02
+          0 0 0 1 0"/>
+      </filter>
+    </svg>
     <img id="loginArt" class="login-art" src="./logo-fenix.png" alt="Tela de abertura do Estúdio de Danças Fênix" decoding="async" fetchpriority="high">
     <div id="loginInteractive" class="login-interactive">
       <div class="login-field">
