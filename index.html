@@ -86,8 +86,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <style id="login-layout-style">
 /* Real controls: the approved background contains no fields or buttons. */
 .login{min-height:100vh;min-height:100svh;width:100%;background:#eee8f0}
-.login-scene{position:relative;min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:flex-end;padding:40px 12% 40px 24px;isolation:isolate}
-.login-art{position:absolute;inset:3% 2%;width:96%;height:94%;object-fit:contain;object-position:center;z-index:-1;user-select:none;filter:url(#login-neutral-light)}
+.login-scene{position:relative;min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:flex-end;padding:40px 12% 40px 24px;isolation:isolate;overflow:clip}
+.login-scene::before{
+ content:"";position:absolute;inset:-72px;z-index:-2;pointer-events:none;
+ background:center / cover no-repeat url("./logo-fenix.png");
+ filter:url(#login-neutral-light) blur(36px);
+}
+.login-art{
+ position:absolute;inset:0;margin:auto;width:min(100%,141vh);width:min(100%,141svh);height:auto;
+ z-index:-1;user-select:none;filter:url(#login-neutral-light);
+ mask-image:linear-gradient(to right, transparent, #000 3%, #000 97%, transparent),
+            linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
+ mask-composite:intersect;
+}
 .login-interactive{position:relative;width:min(370px,100%);display:grid;gap:14px;padding:24px;border:1px solid rgba(255,255,255,.85);border-radius:20px;background:rgba(255,250,255,.94);box-shadow:0 12px 36px rgba(77,22,79,.16)}
 .login-interactive label{margin:0;color:var(--violet);font-size:13px}
 .login-interactive .login-field{display:grid;gap:6px}
@@ -106,7 +117,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .login-setup{z-index:200}
 @media(max-width:900px){
  .login-scene{flex-direction:column;justify-content:center;padding:20px;gap:18px}
- .login-art{position:relative;inset:auto;z-index:auto;width:min(480px,100%);height:auto;border-radius:16px;object-fit:contain}
+ .login-art{position:relative;inset:auto;z-index:auto;margin:0;width:min(480px,100%)}
  .login-interactive{width:min(420px,100%);padding:20px}
  .login-setup{position:fixed}
 }
